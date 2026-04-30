@@ -259,10 +259,76 @@ td.cc{max-width:200px;overflow:hidden;text-overflow:ellipsis}
 
 <!-- ══════════ UPLOAD ══════════ -->
 <div id="upload-sec">
+
+  <!-- システム説明カード -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="sec-title">🚚 物流品質トラブル分析システム　ご利用ガイド</div>
+
+    <!-- システム概要 -->
+    <div style="background:var(--pri-l);border-left:4px solid var(--pri);border-radius:8px;padding:14px 18px;margin-bottom:14px">
+      <div style="font-size:.88rem;font-weight:700;color:var(--pri);margin-bottom:8px">📋 このシステムについて</div>
+      <div style="font-size:.82rem;color:var(--g800);line-height:1.8">
+        物流品質トラブル管理システムに記録された各月・全拠点のトラブルデータをCSV形式で読み込み、
+        月次サマリー・発生傾向・原因分析・再発防止策の評価を自動で行うツールです。<br>
+        <span style="font-size:.77rem;color:var(--g600)">※ データはブラウザ内のみで処理されます。外部サーバーへの送信は一切行いません。</span>
+      </div>
+    </div>
+
+    <!-- 利用手順 -->
+    <div style="font-size:.85rem;font-weight:700;color:var(--g800);margin-bottom:10px">📌 ご利用手順</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:14px">
+
+      <div style="background:var(--g50);border:1.5px solid var(--g200);border-radius:10px;padding:13px 15px">
+        <div style="font-size:.75rem;font-weight:800;color:var(--pri);margin-bottom:6px">STEP 1　CSVをダウンロード</div>
+        <div style="font-size:.79rem;color:var(--g800);line-height:1.7">
+          物流品質トラブル管理システムにログインし、分析対象月の<b>全拠点データ</b>をCSV形式でダウンロードしてください。<br>
+          <span style="color:var(--g600);font-size:.73rem">※ 1ヶ月分ずつダウンロードしてください</span>
+        </div>
+      </div>
+
+      <div style="background:var(--g50);border:1.5px solid var(--g200);border-radius:10px;padding:13px 15px">
+        <div style="font-size:.75rem;font-weight:800;color:var(--pri);margin-bottom:6px">STEP 2　ファイルを読み込む</div>
+        <div style="font-size:.79rem;color:var(--g800);line-height:1.7">
+          ダウンロードしたCSVファイルを下の<b>ドロップ枠にドラッグ＆ドロップ</b>してください。<br>
+          複数月のファイルを同時にドロップすると期間を合算して分析します。
+        </div>
+      </div>
+
+      <div style="background:var(--g50);border:1.5px solid var(--g200);border-radius:10px;padding:13px 15px">
+        <div style="font-size:.75rem;font-weight:800;color:var(--pri);margin-bottom:6px">STEP 3　分析を開始する</div>
+        <div style="font-size:.79rem;color:var(--g800);line-height:1.7">
+          ファイルの読み込みが完了したら<b>「分析を開始する」</b>ボタンをクリックしてください。<br>
+          月次・倉庫別の分析ダッシュボードが自動で表示されます。
+        </div>
+      </div>
+
+      <div style="background:var(--g50);border:1.5px solid var(--g200);border-radius:10px;padding:13px 15px">
+        <div style="font-size:.75rem;font-weight:800;color:var(--pri);margin-bottom:6px">STEP 4　PDF出力・共有</div>
+        <div style="font-size:.79rem;color:var(--g800);line-height:1.7">
+          分析結果は右上の<b>「🖨️ PDF出力」</b>ボタンから印刷・PDF保存が可能です。<br>
+          月次管理会議の資料としてご活用ください。
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 注意事項 -->
+    <div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;padding:12px 16px">
+      <div style="font-size:.8rem;font-weight:700;color:var(--warn);margin-bottom:7px">⚠️ ご利用上の注意</div>
+      <div style="font-size:.78rem;color:var(--g800);line-height:1.85;display:flex;flex-direction:column;gap:3px">
+        <div>・ 対応ファイル形式は <b>CSV（.csv）のみ</b>です。Excel（.xlsx）は直接読み込めません。</div>
+        <div>・ CSVファイルの文字コードは <b>UTF-8</b> を推奨します（Shift-JISの場合は文字化けすることがあります）。</div>
+        <div>・ 分析データはブラウザを閉じると消去されます。必要に応じて<b>PDF出力して保存</b>してください。</div>
+        <div>・ 本システムは社内利用を目的としています。CSVデータを外部へ送信・共有しないようご注意ください。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ファイル読み込みカード -->
   <div class="card">
     <div class="sec-title">📂 CSVファイルを読み込む</div>
     <div class="alert-info">
-      📁 <b>csv フォルダ</b> 内のCSVファイルをドラッグ＆ドロップしてください。複数ファイル同時対応（期間を合算して分析）。
+      📁 ダウンロードしたCSVファイルをドラッグ＆ドロップしてください。複数ファイル同時対応（期間を合算して分析）。
     </div>
     <div class="drop-zone" id="drop-zone"
          ondragover="ev(event)" ondragleave="el(event)" ondrop="ed(event)"
