@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物流品質トラブル分析システム</title>
+<!-- Noto Sans JP: PDF印刷時にテキスト選択・コピーを可能にするWebフォント -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+        onerror="loadChartCDN2()"></script>
+<script>
+function loadChartCDN2(){
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+  s.onerror=function(){
+    var s2=document.createElement('script');
+    s2.src='https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js';
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+}
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --pri:#1a56db;--pri-d:#1648c0;--pri-l:#e8f0fe;
+  --ok:#0e9f6e;--warn:#d97706;--danger:#e02424;--purple:#7c3aed;
+  --g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g400:#9ca3af;
+  --g600:#4b5563;--g800:#1f2937;
+  --sh:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);
+  --sh-md:0 4px 6px rgba(0,0,0,.07),0 2px 4px rgba(0,0,0,.06);
+  --r:12px;
+}
+body{font-family:"Noto Sans JP","Hiragino Sans","Meiryo",sans-serif;background:var(--g100);color:var(--g800);min-height:100vh}
+
+/* ─ Header ─ */
+.hd{background:var(--pri);color:#fff;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:var(--sh-md)}
+.hd-title h1{font-size:1.05rem;font-weight:700}
+.hd-title .sub{font-size:.72rem;opacity:.8;margin-top:1px}
+.hd-act{display:flex;gap:8px;align-items:center}
+
+/* ─ Buttons ─ */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 15px;border-radius:8px;border:none;font-size:.84rem;font-weight:600;cursor:pointer;transition:all .15s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-pri{background:var(--pri);color:#fff}
+.btn-pri:hover:not(:disabled){background:var(--pri-d)}
+.btn-wh{background:#fff;color:var(--pri);border:1.5px solid var(--pri)}
+.btn-wh:hover:not(:disabled){background:var(--pri-l)}
+.btn-ok{background:var(--ok);color:#fff}
+.btn-ok:hover:not(:disabled){background:#0a7d56}
+.btn-sm{padding:4px 10px;font-size:.78rem}
+
+/* ─ Layout ─ */
+.main{max-width:1400px;margin:0 auto;padding:20px}
+
+/* ─ Cards ─ */
+.card{background:#fff;border-radius:var(--r);box-shadow:var(--sh);padding:18px;margin-bottom:16px}
+.sec-title{font-size:.95rem;font-weight:700;padding:10px 0 12px;border-bottom:2px solid var(--g100);margin-bottom:14px;display:flex;align-items:center;gap:7px;color:var(--g800)}
+
+/* ─ Upload ─ */
+#upload-sec .drop-zone{border:2.5px dashed var(--g200);border-radius:var(--r);padding:44px 28px;text-align:center;cursor:pointer;transition:all .2s;background:var(--g50)}
+#upload-sec .drop-zone:hover,#upload-sec .drop-zone.drag-over{border-color:var(--pri);background:var(--pri-l)}
+#upload-sec .drop-zone h2{font-size:1.05rem;margin:12px 0 6px}
+#upload-sec .drop-zone p{font-size:.85rem;color:var(--g600);margin-bottom:16px}
+#file-input{display:none}
+.drop-icon{font-size:3rem}
+
+/* ─ File progress cards ─ */
+.file-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.fi-card{background:var(--g50);border-radius:10px;border:1.5px solid var(--g200);padding:11px 13px}
+.fi-card.ok{border-color:var(--ok)}.fi-card.err{border-color:var(--danger)}
+.fi-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.fi-name{flex:1;font-weight:600;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi-meta{font-size:.73rem;color:var(--g400);flex-shrink:0}
+.fi-rm{background:none;border:none;cursor:pointer;color:var(--g400);font-size:.95rem;padding:2px 6px;border-radius:4px}
+.fi-rm:hover{background:var(--g200)}
+.prog-wrap{height:7px;background:var(--g200);border-radius:4px;overflow:hidden}
+.prog-bar{height:100%;border-radius:4px;transition:width .25s ease}
+.prog-bar.loading{background:var(--pri)}.prog-bar.done{background:var(--ok)}.prog-bar.err{background:var(--danger)}
+.prog-lbl{display:flex;justify-content:space-between;font-size:.7rem;color:var(--g600);margin-top:3px}
+
+/* ─ Analysis overlay ─ */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center}
+.ov-box{background:#fff;border-radius:16px;padding:32px 36px;min-width:340px;max-width:440px;text-align:center}
+.ov-title{font-size:1rem;font-weight:700;margin-bottom:5px}
+.ov-step{font-size:.84rem;color:var(--g600);margin-bottom:18px;min-height:1.3em}
+.ov-pw{height:13px;background:var(--g100);border-radius:7px;overflow:hidden;margin-bottom:8px}
+.ov-pb{height:100%;border-radius:7px;background:var(--pri);transition:width .35s ease}
+.ov-pct{font-size:.84rem;font-weight:700;color:var(--pri)}
+.ov-list{margin-top:14px;text-align:left;font-size:.78rem;display:flex;flex-direction:column;gap:3px}
+.ov-item{display:flex;align-items:center;gap:7px;padding:2px 0;color:var(--g400)}
+.ov-item.done{color:var(--ok)}.ov-item.active{color:var(--pri);font-weight:700}
+
+/* ─ Dashboard ─ */
+#dash-sec{display:none}
+
+/* ─ Month navigator ─ */
+.month-nav-bar{background:#fff;border-radius:var(--r);box-shadow:var(--sh);padding:12px 18px;display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.month-nav-btns{display:flex;align-items:center;gap:8px}
+.mnav-btn{background:var(--g100);border:none;border-radius:7px;width:30px;height:30px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--g600);transition:all .15s}
+.mnav-btn:hover{background:var(--pri-l);color:var(--pri)}
+.month-label{font-size:1.15rem;font-weight:700;color:var(--g800);min-width:120px;text-align:center}
+.month-count{font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--pri-l);color:var(--pri)}
+.month-sep{flex:1}
+.all-months-hint{font-size:.75rem;color:var(--g400)}
+
+/* ─ Warehouse tabs ─ */
+.wh-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:2px}
+.wh-tab{padding:7px 16px;border-radius:8px;border:1.5px solid var(--g200);background:#fff;font-size:.82rem;font-weight:600;cursor:pointer;color:var(--g600);transition:all .15s;white-space:nowrap}
+.wh-tab:hover{border-color:var(--pri);color:var(--pri);background:var(--pri-l)}
+.wh-tab.active{background:var(--pri);color:#fff;border-color:var(--pri)}
+.wh-tab.no-data{opacity:.45;cursor:default}
+
+/* ─ Summary strip ─ */
+.sum-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px;margin-bottom:16px}
+.sum-card{background:#fff;border-radius:var(--r);box-shadow:var(--sh);padding:15px 16px;border-left:4px solid var(--pri)}
+.sum-card.ok{border-color:var(--ok)}.sum-card.warn{border-color:var(--warn)}.sum-card.danger{border-color:var(--danger)}.sum-card.purple{border-color:var(--purple)}
+.sum-lbl{font-size:.73rem;color:var(--g600);font-weight:600;margin-bottom:4px}
+.sum-val{font-size:1.75rem;font-weight:800;line-height:1;color:var(--g800)}
+.sum-val.sm{font-size:1.1rem}
+.sum-sub{font-size:.7rem;color:var(--g400);margin-top:3px}
+.sum-diff{font-size:.72rem;font-weight:700;margin-top:2px}
+.sum-diff.up{color:var(--danger)}.sum-diff.dn{color:var(--ok)}.sum-diff.eq{color:var(--g400)}
+
+/* ─ Grid ─ */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+.ch-h260{position:relative;height:260px}
+.ch-h200{position:relative;height:200px}
+.ch-h320{position:relative;height:320px}
+
+/* ─ Rank rows ─ */
+.rk-row{display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--g100);font-size:.82rem}
+.rk-row:last-child{border-bottom:none}
+.rk-n{width:16px;font-size:.7rem;font-weight:700;color:var(--g400);flex-shrink:0}
+.rk-lbl{flex:3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px}
+.rk-bw{flex:2;height:7px;background:var(--g100);border-radius:4px;overflow:hidden;margin:0 8px}
+.rk-bb{height:100%;border-radius:4px}
+.rk-cnt{width:38px;text-align:right;font-size:.75rem;color:var(--g400);flex-shrink:0}
+
+/* ─ Advice cards ─ */
+.adv-list{display:flex;flex-direction:column;gap:10px}
+.adv-card{border-radius:10px;padding:14px 16px;border-left:4px solid var(--pri);background:var(--pri-l)}
+.adv-card.high{border-color:var(--danger);background:#fef2f2}
+.adv-card.med{border-color:var(--warn);background:#fffbeb}
+.adv-card.good{border-color:var(--ok);background:#d1fae5}
+.adv-card.info{border-color:var(--purple);background:#ede9fe}
+.adv-priority{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:12px;display:inline-block;margin-bottom:5px}
+.adv-card.high .adv-priority{background:var(--danger);color:#fff}
+.adv-card.med .adv-priority{background:var(--warn);color:#fff}
+.adv-card.good .adv-priority{background:var(--ok);color:#fff}
+.adv-card.info .adv-priority{background:var(--purple);color:#fff}
+.adv-title{font-size:.87rem;font-weight:700;margin-bottom:5px;color:var(--g800)}
+.adv-evidence{font-size:.78rem;color:var(--g600);margin-bottom:5px;padding:5px 8px;background:rgba(255,255,255,.6);border-radius:6px}
+.adv-action{font-size:.8rem;color:var(--g800);line-height:1.6}
+.adv-action li{margin-left:1em;margin-bottom:2px}
+
+/* ─ Badge / Chip ─ */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:700}
+.bd-b{background:var(--pri-l);color:var(--pri)}
+.bd-o{background:#fef3c7;color:var(--warn)}
+.bd-r{background:#fde8e8;color:var(--danger)}
+.bd-g{background:#d1fae5;color:var(--ok)}
+.bd-p{background:#ede9fe;color:var(--purple)}
+
+/* ─ Table ─ */
+.tbl-wrap{overflow:auto;max-height:360px}
+table{width:100%;border-collapse:collapse;font-size:.77rem}
+th{background:var(--g100);padding:7px 9px;text-align:left;font-weight:700;color:var(--g600);border-bottom:1px solid var(--g200);white-space:nowrap;position:sticky;top:0;z-index:1}
+td{padding:6px 9px;border-bottom:1px solid var(--g100);white-space:nowrap}
+tr:hover td{background:var(--g50)}
+td.cc{max-width:200px;overflow:hidden;text-overflow:ellipsis}
+
+/* ─ Misc ─ */
+.txt-sm{font-size:.75rem;color:var(--g400)}
+.mt1{margin-top:6px}.mt2{margin-top:12px}
+.empty-state{text-align:center;padding:40px;color:var(--g400);font-size:.9rem}
+.alert-info{background:var(--pri-l);color:var(--pri);border:1px solid #bee3f8;padding:9px 13px;border-radius:8px;font-size:.82rem;margin-bottom:12px}
+
+/* ─ Print ─ */
+@media print{
+  /* 全要素に適用 → 描画モードを統一しテキストをパス変換させない */
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{background:#fff;font-family:"Noto Sans JP","Hiragino Sans","Meiryo",sans-serif}
+  .hd{position:static;background:var(--pri)!important}
+  .no-print{display:none!important}
+  #upload-sec{display:none!important}
+  #dash-sec{display:block!important}
+  .main{padding:4px}
+  /* cardのpage-break-inside:avoidを外す → 大カードが丸ごと次ページに飛ぶ空白を防止 */
+  .card{box-shadow:none;border:1px solid var(--g200);margin-bottom:5px;page-break-inside:auto}
+  /* 小要素単位でのみ改ページ禁止 */
+  .adv-card{page-break-inside:avoid}
+  .sum-card{page-break-inside:avoid}
+  /* g2は2列・g3は3列を維持（3列→2列変換が棒グラフと円グラフの重なりを引き起こすため） */
+  .g2{grid-template-columns:1fr 1fr;margin-bottom:5px}
+  .g3{grid-template-columns:1fr 1fr 1fr;margin-bottom:5px}
+  .sum-strip{grid-template-columns:repeat(5,1fr)}
+  .adv-card,.sum-card,.badge,.wh-tab.active{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rk-bb{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .tbl-wrap{max-height:none}
+  .wh-tabs .wh-tab:not(.active){display:none}
+  .month-nav-bar .mnav-btn{display:none}
+  /* グラフ高さを縮小（g3=3列での横幅縮小に合わせてch-h200も小さく） */
+  .ch-h260{height:155px!important;overflow:hidden!important}
+  .ch-h200{height:110px!important;overflow:hidden!important}
+  .ch-h320{height:175px!important;overflow:hidden!important}
+  /* g3グリッドの各セルもclip → canvasはみ出しによる下コンテンツとの重なりを防止 */
+  .g3>div{overflow:hidden;min-height:0}
+  .g2>div{overflow:hidden;min-height:0}
+  /* canvas自体をコンテナ内に収める */
+  .ch-h200 canvas,.ch-h260 canvas,.ch-h320 canvas{
+    max-width:100%!important;max-height:100%!important;
+    width:100%!important;height:100%!important}
+  /* テキスト・余白を縮小してページ密度を上げる */
+  .sec-title{padding:5px 0 7px;margin-bottom:7px}
+  .adv-list{gap:5px}
+  .adv-card{padding:9px 13px}
+  .adv-evidence{padding:4px 7px;margin-bottom:4px}
+  /* ── サマリーカード（① 月次サマリー / ②-B）フォント縮小 ── */
+  /* 5列グリッドでラベル・数値が改行しないよう全体を縮小 */
+  .sum-card{padding:9px 8px;border-left-width:3px}
+  .sum-lbl{font-size:.6rem;margin-bottom:2px;line-height:1.3}
+  .sum-val{font-size:1.25rem;line-height:1}
+  .sum-val.sm{font-size:.8rem;line-height:1.3;word-break:break-all}
+  .sum-sub{font-size:.58rem;margin-top:2px;line-height:1.3;white-space:normal;word-break:break-all}
+  .sum-diff{font-size:.58rem;margin-top:1px}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hd">
+  <div class="hd-title">
+    <h1>🚚 物流品質トラブル分析システム</h1>
+    <div class="sub">月次×倉庫別 トラブル特性分析・傾向と対策アドバイス</div>
+  </div>
+  <div class="hd-act no-print">
+    <button class="btn btn-wh btn-sm" id="btn-reset" onclick="resetAll()" style="display:none">↩ リセット</button>
+    <button class="btn btn-ok" id="btn-pdf" onclick="doPrint()" style="display:none">🖨️ PDF出力</button>
+  </div>
+</header>
+
+<!-- ANALYSIS OVERLAY -->
+<div class="overlay" id="overlay" style="display:none">
+  <div class="ov-box">
+    <div class="ov-title">🔄 分析データを構築中...</div>
+    <div class="ov-step" id="ov-msg">初期化中</div>
+    <div class="ov-pw"><div class="ov-pb" id="ov-bar" style="width:0%"></div></div>
+    <div class="ov-pct" id="ov-pct">0%</div>
+    <div class="ov-list" id="ov-list"></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ══════════ UPLOAD ══════════ -->
+<div id="upload-sec">
+  <div class="card">
+    <div class="sec-title">📂 CSVファイルを読み込む</div>
+    <div class="alert-info">
+      📁 <b>csv フォルダ</b> 内のCSVファイルをドラッグ＆ドロップしてください。複数ファイル同時対応（期間を合算して分析）。
+    </div>
+    <div class="drop-zone" id="drop-zone"
+         ondragover="ev(event)" ondragleave="el(event)" ondrop="ed(event)"
+         onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">📊</div>
+      <h2>CSVファイルをここにドロップ</h2>
+      <p>クリックでファイル選択も可能</p>
+      <button class="btn btn-pri no-print" onclick="event.stopPropagation();document.getElementById('file-input').click()">ファイルを選択</button>
+    </div>
+    <input type="file" id="file-input" accept=".csv" multiple onchange="onSel(event)">
+    <div class="file-list" id="file-list"></div>
+    <div id="load-action" style="display:none;margin-top:10px">
+      <button class="btn btn-pri" id="start-btn" onclick="startAnalysis()">✔ 分析を開始する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DASHBOARD ══════════ -->
+<div id="dash-sec">
+
+  <!-- 月ナビゲーター -->
+  <div class="month-nav-bar no-print">
+    <div class="month-nav-btns">
+      <button class="mnav-btn" onclick="moveMonth(-1)" title="前月">◀</button>
+      <div class="month-label" id="month-label">----年-月</div>
+      <button class="mnav-btn" onclick="moveMonth(+1)" title="次月">▶</button>
+    </div>
+    <span class="month-count" id="month-count">0件</span>
+    <span class="month-sep"></span>
+    <span class="all-months-hint" id="all-months-hint"></span>
+  </div>
+
+  <!-- 月ラベル（印刷用） -->
+  <div style="display:none" class="print-only" id="print-month-label">
+    <div class="card" style="padding:10px 16px;font-size:1rem;font-weight:700"></div>
+  </div>
+
+  <!-- 倉庫タブ -->
+  <div class="wh-tabs" id="wh-tabs"></div>
+
+  <!-- ① 月次サマリー -->
+  <div class="card">
+    <div class="sec-title">📊 ① 月次サマリー</div>
+    <div class="sum-strip" id="sum-strip"></div>
+  </div>
+
+  <!-- ② トラブル特性分析 -->
+  <div class="card">
+    <div class="sec-title">🔬 ② トラブル特性分析</div>
+    <div class="g3">
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">トラブル区分</div>
+        <div class="ch-h200"><canvas id="ch-tc"></canvas></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">発生場所</div>
+        <div class="ch-h200"><canvas id="ch-place"></canvas></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">運送会社別件数</div>
+        <div class="ch-h200"><canvas id="ch-carrier"></canvas></div>
+      </div>
+    </div>
+    <div class="g2">
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">発生原因ランキング（上位8）</div>
+        <div id="cause-rank"></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">再発防止策（今月・最新5件）</div>
+        <div id="prevent-latest"></div>
+      </div>
+    </div>
+    <!-- 発生原因・再発防止策 自動評価コメント -->
+    <div id="cause-prevent-comment"></div>
+    <!-- AI自動評価コメント -->
+    <div id="trouble-comment"></div>
+  </div>
+
+  <!-- ②-B 得意先・商品コード別分析 -->
+  <div class="card">
+    <div class="sec-title">🏢 ②-B 得意先・商品コード別分析</div>
+    <div id="custprod-strip" class="sum-strip" style="margin-bottom:14px"></div>
+    <div class="g2">
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">得意先コード別件数（上位10）</div>
+        <div id="customer-rank"></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">商品コード別件数（上位10）</div>
+        <div id="product-rank"></div>
+      </div>
+    </div>
+    <div id="custprod-repeat" style="margin-top:12px"></div>
+  </div>
+
+  <!-- ③ 傾向分析 -->
+  <div class="card">
+    <div class="sec-title">📈 ③ 傾向分析（全期間推移）</div>
+    <div class="g2">
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">月次件数推移</div>
+        <div class="ch-h260"><canvas id="ch-trend"></canvas></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;color:var(--g600);margin-bottom:8px">出荷元倉庫別月次推移</div>
+        <div class="ch-h260"><canvas id="ch-wh-trend"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 傾向と対策アドバイス -->
+  <div class="card">
+    <div class="sec-title">🛡️ ④ 傾向と対策アドバイス</div>
+    <div id="advice-list" class="adv-list"></div>
+  </div>
+
+  <!-- 詳細データ（印刷なし） -->
+  <div class="card no-print">
+    <div class="sec-title">📋 詳細データ <span class="txt-sm" id="detail-note" style="margin-left:6px"></span></div>
+    <div class="tbl-wrap" id="detail-table"></div>
+  </div>
+
+  <div style="text-align:center;font-size:.72rem;color:var(--g400);padding:6px 0">
+    出力日：<span id="rpt-date"></span> ／ 物流品質トラブル分析システム
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// MASTER DATA
+// ══════════════════════════════════════════════
+const M = {
+  所属組織:   {'1':'本社FAX','2':'本社web','3':'東日本CS','4':'九州受付'},
+  発生場所:   {'1':'配送中','2':'お客様先'},
+  出荷元倉庫: {'1':'札幌倉庫','2':'東日本配送センター','3':'埼玉倉庫','4':'横浜倉庫',
+               '5':'大阪第1倉庫','6':'大阪第2倉庫','7':'神戸倉庫','8':'西日本配送センター',
+               '9':'福岡倉庫','10':'沖縄倉庫'},
+  運送会社名: {'1':'ヤマト運輸','2':'佐川急便','3':'福山通運','4':'西濃運輸','5':'九州航空','6':'その他輸送会社'},
+  トラブル区分:{'1':'荷役トラブル','2':'配送トラブル'},
+  単位:       {'1':'ピース','2':'ケース'},
+};
+const PAL=['#1a56db','#e02424','#0e9f6e','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#9333ea'];
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let allRows=[], loadedFiles=[], charts={};
+let selYM='';      // 選択中の年月 'YYYY-MM'
+let selWH='全倉庫'; // 選択中の倉庫名
+let allMonths=[];   // 全データの月リスト（昇順）
+
+// ══════════════════════════════════════════════
+// DRAG & DROP
+// ══════════════════════════════════════════════
+function ev(e){e.preventDefault();document.getElementById('drop-zone').classList.add('drag-over')}
+function el(e){document.getElementById('drop-zone').classList.remove('drag-over')}
+function ed(e){
+  e.preventDefault();document.getElementById('drop-zone').classList.remove('drag-over');
+  const files=[...e.dataTransfer.files].filter(f=>f.name.toLowerCase().endsWith('.csv'));
+  if(!files.length){alert('CSVファイルをドロップしてください。');return}
+  files.forEach(queueFile);
+}
+function onSel(e){[...e.target.files].forEach(queueFile);e.target.value=''}
+
+// ══════════════════════════════════════════════
+// FILE LOADING
+// ══════════════════════════════════════════════
+function queueFile(file){
+  const id='f_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  const item={id,name:file.name,size:file.size,rows:0,status:'loading',pct:0,msg:'読み込み中...'};
+  loadedFiles.push(item);renderFileList();
+  const reader=new FileReader();
+  reader.onprogress=(e)=>{
+    if(!e.lengthComputable)return;
+    item.pct=Math.round(e.loaded/e.total*55);
+    item.msg=`読み込み中... ${item.pct}%（${(e.total/1024).toFixed(0)}KB）`;
+    updFi(id);
+  };
+  reader.onload=(e)=>{
+    item.pct=58;item.msg='行境界を検出中...';updFi(id);
+    requestAnimationFrame(()=>{
+      let text=e.target.result;
+      if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+      const boundaries=csvFindRows(text);
+      if(boundaries.length<2){
+        item.status='empty';item.pct=100;item.msg='⚠️ データが見つかりません';
+        renderFileList();checkReady();return;
+      }
+      const headers=csvParseRow(text,boundaries[0][0],boundaries[0][1]);
+      const dataRows=boundaries.slice(1);
+      const total=dataRows.length;
+      const acc=[];let idx=0;
+      item.pct=62;item.msg=`CSV解析中... 0/${total}行`;updFi(id);
+      function batch(){
+        const end=Math.min(idx+80,total);
+        for(let i=idx;i<end;i++){
+          const fields=csvParseRow(text,dataRows[i][0],dataRows[i][1]);
+          if(fields.every(f=>!f.trim()))continue;
+          const obj={};
+          headers.forEach((h,j)=>{obj[h.trim()]=(fields[j]??'').trim();});
+          acc.push(obj);
+        }
+        idx=end;
+        item.pct=62+Math.round(idx/total*26);
+        item.msg=`CSV解析中... ${idx.toLocaleString()}/${total.toLocaleString()}行`;
+        updFi(id);
+        if(idx<total){setTimeout(batch,0);return;}
+        item.pct=90;item.msg='名称変換中...';updFi(id);
+        requestAnimationFrame(()=>{
+          const decoded=acc.map(decodeRow);
+          item.data=decoded;item.rows=decoded.length;
+          item.status=decoded.length?'ok':'empty';
+          item.pct=100;
+          item.msg=decoded.length?`✅ 完了（${decoded.length.toLocaleString()}件）`:'⚠️ データ0件';
+          renderFileList();checkReady();
+        });
+      }
+      setTimeout(batch,0);
+    });
+  };
+  reader.onerror=()=>{item.status='err';item.pct=100;item.msg='❌ 読み込みエラー';renderFileList()};
+  reader.readAsText(file,'UTF-8');
+}
+
+function decodeRow(raw){
+  const r=Object.fromEntries(Object.entries(raw).map(([k,v])=>[k.trim(),(v??'').trim()]));
+  Object.keys(M).forEach(col=>{
+    if(r[col]!==undefined)r['_'+col]=M[col][r[col]]||(r[col]?`(${r[col]})`:'-');
+  });
+  r._date=parseDate(r['発生日時']);
+  r._month=r._date?`${r._date.getFullYear()}-${String(r._date.getMonth()+1).padStart(2,'0')}`:'';
+  r._qty=parseFloat(r['数量'])||0;
+  return r;
+}
+
+function updFi(id){
+  const item=loadedFiles.find(f=>f.id===id);
+  if(!item)return;
+  const el=document.getElementById('fi_'+id);
+  if(!el)return;
+  const bc=item.status==='ok'?'done':item.status==='err'?'err':'loading';
+  el.querySelector('.prog-bar').style.width=item.pct+'%';
+  el.querySelector('.prog-bar').className='prog-bar '+bc;
+  el.querySelector('.prog-msg').textContent=item.msg;
+  el.querySelector('.prog-pct').textContent=item.pct+'%';
+}
+
+function renderFileList(){
+  document.getElementById('file-list').innerHTML=loadedFiles.map(item=>{
+    const icon=item.status==='ok'?'✅':item.status==='loading'?'⏳':item.status==='empty'?'⚠️':'❌';
+    const bc=item.status==='ok'?'done':item.status==='err'?'err':'loading';
+    return`<div class="fi-card ${item.status==='ok'?'ok':item.status==='err'?'err':''}" id="fi_${item.id}">
+      <div class="fi-top">
+        <span>${icon}</span>
+        <span class="fi-name" title="${esc(item.name)}">${esc(item.name)}</span>
+        <span class="fi-meta">${item.status==='ok'?item.rows.toLocaleString()+'件':''}</span>
+        <button class="fi-rm" onclick="rmFile('${item.id}')">✕</button>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar ${bc}" style="width:${item.pct}%"></div></div>
+      <div class="prog-lbl"><span class="prog-msg">${esc(item.msg)}</span><span class="prog-pct">${item.pct}%</span></div>
+    </div>`;
+  }).join('');
+}
+
+function rmFile(id){loadedFiles=loadedFiles.filter(f=>f.id!==id);renderFileList();checkReady();}
+function checkReady(){
+  const ok=loadedFiles.some(f=>f.status==='ok');
+  document.getElementById('load-action').style.display=ok?'block':'none';
+}
+
+// ══════════════════════════════════════════════
+// CSV PARSER
+// ══════════════════════════════════════════════
+function csvFindRows(text){
+  const rows=[];let inQ=false,start=0;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(c==='"'){if(inQ&&text[i+1]==='"')i++;else inQ=!inQ;}
+    else if(c==='\n'&&!inQ){const end=(i>0&&text[i-1]==='\r')?i-1:i;rows.push([start,end]);start=i+1;}
+  }
+  if(start<text.length)rows.push([start,text.length]);
+  return rows;
+}
+function csvParseRow(text,start,end){
+  const fields=[];let pos=start;
+  while(pos<=end){
+    let f='';
+    if(pos<end&&text[pos]==='"'){
+      pos++;
+      while(pos<=end){const c=text[pos];if(c==='"'){if(text[pos+1]==='"'){f+='"';pos+=2;}else{pos++;break;}}else{f+=c;pos++;}}
+    } else {
+      while(pos<end&&text[pos]!==','){if(text[pos]!=='\r')f+=text[pos];pos++;}
+    }
+    fields.push(f);
+    if(pos>=end)break;
+    if(text[pos]===',')pos++;else break;
+  }
+  return fields;
+}
+
+// ══════════════════════════════════════════════
+// START ANALYSIS (overlay)
+// ══════════════════════════════════════════════
+const OV_STEPS=['データ統合','月リスト構築','ダッシュボード表示','チャート描画','分析完了'];
+function showOverlay(){
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('ov-list').innerHTML=OV_STEPS.map((s,i)=>
+    `<div class="ov-item" id="ov_${i}">⬜ ${s}</div>`).join('');
+  setOv(0,-1);
+}
+function setOv(pct,idx){
+  document.getElementById('ov-bar').style.width=pct+'%';
+  document.getElementById('ov-pct').textContent=pct+'%';
+  OV_STEPS.forEach((_,i)=>{
+    const el=document.getElementById('ov_'+i);if(!el)return;
+    if(i<idx){el.className='ov-item done';el.textContent='✅ '+OV_STEPS[i];}
+    else if(i===idx){el.className='ov-item active';el.textContent='▶ '+OV_STEPS[i]+'...';document.getElementById('ov-msg').textContent=OV_STEPS[i]+'...';}
+    else{el.className='ov-item';el.textContent='⬜ '+OV_STEPS[i];}
+  });
+}
+function hideOverlay(){
+  OV_STEPS.forEach((_,i)=>{const el=document.getElementById('ov_'+i);if(el){el.className='ov-item done';el.textContent='✅ '+OV_STEPS[i];}});
+  document.getElementById('ov-bar').style.width='100%';
+  document.getElementById('ov-pct').textContent='100%';
+  document.getElementById('ov-msg').textContent='完了！';
+  setTimeout(()=>document.getElementById('overlay').style.display='none',400);
+}
+function tick(fn){return new Promise(r=>requestAnimationFrame(()=>setTimeout(()=>{try{fn();}catch(e){console.error('[tick error]',e);}r();},10)));}
+
+async function startAnalysis(){
+  document.getElementById('start-btn').disabled=true;
+  showOverlay();await tick(()=>{});
+
+  setOv(10,0);
+  await tick(()=>{
+    allRows=loadedFiles.filter(f=>f.status==='ok').flatMap(f=>f.data);
+    allRows.sort((a,b)=>(a._date||0)-(b._date||0));
+  });
+
+  setOv(30,1);
+  await tick(()=>{
+    allMonths=[...new Set(allRows.map(r=>r._month).filter(Boolean))].sort();
+    // デフォルト：最新月
+    selYM=allMonths[allMonths.length-1]||'';
+    selWH='全倉庫';
+  });
+
+  setOv(55,2);
+  await tick(()=>{
+    document.getElementById('upload-sec').style.display='none';
+    document.getElementById('dash-sec').style.display='block';
+    document.getElementById('btn-reset').style.display='flex';
+    document.getElementById('btn-pdf').style.display='flex';
+    document.getElementById('rpt-date').textContent=new Date().toLocaleDateString('ja-JP');
+    renderMonthNav();renderWhTabs();renderSummary();
+  });
+
+  setOv(80,3);
+  await tick(()=>{
+    renderCharts();
+    renderAdvice();
+    renderDetailTable();
+  });
+
+  setOv(100,4);
+  hideOverlay();
+  document.getElementById('start-btn').disabled=false;
+}
+
+function resetAll(){
+  allRows=[];loadedFiles=[];allMonths=[];selYM='';selWH='全倉庫';
+  Object.values(charts).forEach(c=>c.destroy());charts={};
+  document.getElementById('file-list').innerHTML='';
+  document.getElementById('load-action').style.display='none';
+  document.getElementById('upload-sec').style.display='block';
+  document.getElementById('dash-sec').style.display='none';
+  document.getElementById('btn-reset').style.display='none';
+  document.getElementById('btn-pdf').style.display='none';
+}
+
+// ══════════════════════════════════════════════
+// MONTH NAVIGATION
+// ══════════════════════════════════════════════
+function moveMonth(delta){
+  const idx=allMonths.indexOf(selYM);
+  const ni=Math.max(0,Math.min(allMonths.length-1,idx+delta));
+  selYM=allMonths[ni];
+  renderAll();
+}
+function renderMonthNav(){
+  const [y,m]=selYM.split('-');
+  document.getElementById('month-label').textContent=`${y}年${parseInt(m)}月`;
+  const rows=getRows();
+  document.getElementById('month-count').textContent=`${rows.length}件`;
+  document.getElementById('all-months-hint').textContent=
+    `データ期間: ${allMonths[0]?.replace('-','年')+'月'} ～ ${allMonths[allMonths.length-1]?.replace('-','年')+'月'}`;
+  // 印刷用ラベル
+  const wh=selWH==='全倉庫'?'全倉庫':selWH;
+  document.querySelector('#print-month-label .card').textContent=`${y}年${parseInt(m)}月 ${wh} 分析レポート`;
+}
+
+// ══════════════════════════════════════════════
+// WAREHOUSE TABS
+// ══════════════════════════════════════════════
+function renderWhTabs(){
+  // 今月データのある倉庫
+  const monthRows=allRows.filter(r=>r._month===selYM);
+  const whs=[...new Set(monthRows.map(r=>r._出荷元倉庫).filter(Boolean))].sort();
+  document.getElementById('wh-tabs').innerHTML=
+    ['全倉庫',...whs].map(wh=>`
+      <button class="wh-tab ${selWH===wh?'active':''}"
+        onclick="selWH='${wh}';renderAll()">
+        ${wh==='全倉庫'?'🏢 全倉庫':'🏭 '+wh}
+      </button>`).join('');
+}
+
+// ══════════════════════════════════════════════
+// DATA HELPERS
+// ══════════════════════════════════════════════
+function getRows(){
+  return allRows.filter(r=>{
+    if(r._month!==selYM)return false;
+    if(selWH!=='全倉庫'&&r._出荷元倉庫!==selWH)return false;
+    return true;
+  });
+}
+function getPrevRows(){
+  const idx=allMonths.indexOf(selYM);
+  if(idx<=0)return[];
+  const prevYM=allMonths[idx-1];
+  return allRows.filter(r=>{
+    if(r._month!==prevYM)return false;
+    if(selWH!=='全倉庫'&&r._出荷元倉庫!==selWH)return false;
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════
+// RENDER ALL
+// ══════════════════════════════════════════════
+function renderAll(){
+  renderMonthNav();renderWhTabs();renderSummary();renderCharts();renderAdvice();renderDetailTable();
+}
+
+// ══════════════════════════════════════════════
+// SUMMARY
+// ══════════════════════════════════════════════
+function renderSummary(){
+  const rows=getRows();const prev=getPrevRows();
+  const n=rows.length;const pn=prev.length;
+  const qty=rows.reduce((s,r)=>s+r._qty,0);
+  const pqty=prev.reduce((s,r)=>s+r._qty,0);
+  const topTC=topN(cntBy(rows,r=>r._トラブル区分),1)[0];
+  const topCar=topN(cntBy(rows,r=>r._運送会社名),1)[0];
+  const noAdv=rows.filter(r=>!r['再発防止策']?.trim()).length;
+
+  function diffHtml(cur,prv){
+    if(!prv)return '';
+    const d=cur-prv;
+    const cls=d>0?'up':d<0?'dn':'eq';
+    const sym=d>0?'▲':d<0?'▼':'－';
+    const pct=prv?Math.abs(Math.round(d/prv*100))+'%':'';
+    return`<div class="sum-diff ${cls}">${sym}${Math.abs(d)}件 ${pct} 前月比</div>`;
+  }
+
+  document.getElementById('sum-strip').innerHTML=`
+    <div class="sum-card ${n>pn&&pn>0?'danger':n<pn&&pn>0?'ok':''}">
+      <div class="sum-lbl">📋 今月の件数</div>
+      <div class="sum-val">${n}</div>
+      <div class="sum-sub">${selWH}</div>
+      ${diffHtml(n,pn)}
+    </div>
+    <div class="sum-card warn">
+      <div class="sum-lbl">📦 影響数量合計</div>
+      <div class="sum-val">${qty.toLocaleString(undefined,{maximumFractionDigits:1})}</div>
+      <div class="sum-sub">${pqty?`前月 ${pqty.toLocaleString(undefined,{maximumFractionDigits:1})}`:''}</div>
+    </div>
+    <div class="sum-card danger">
+      <div class="sum-lbl">🔺 最多トラブル区分</div>
+      <div class="sum-val sm">${topTC?topTC[0]:'-'}</div>
+      <div class="sum-sub">${topTC?topTC[1]+'件（全体の'+Math.round(topTC[1]/Math.max(n,1)*100)+'%）':''}</div>
+    </div>
+    <div class="sum-card purple">
+      <div class="sum-lbl">🚛 最多運送会社</div>
+      <div class="sum-val sm">${topCar?topCar[0]:'-'}</div>
+      <div class="sum-sub">${topCar?topCar[1]+'件（'+Math.round(topCar[1]/Math.max(n,1)*100)+'%）':''}</div>
+    </div>
+    <div class="sum-card ${noAdv>n*0.4?'danger':'ok'}">
+      <div class="sum-lbl">📝 再発防止策</div>
+      <div class="sum-val sm">${n-noAdv}/${n}件</div>
+      <div class="sum-sub">未入力: ${noAdv}件</div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════════
+function renderCharts(){
+  const rows=getRows();
+  // トラブル区分ドーナツ
+  mkDoughnut('ch-tc',cntBy(rows,r=>r._トラブル区分));
+  // 発生場所ドーナツ
+  mkDoughnut('ch-place',cntBy(rows,r=>r._発生場所));
+  // 運送会社横棒
+  mkHBar('ch-carrier',topN(cntBy(rows,r=>r._運送会社名),8),'#7c3aed');
+  // 発生原因ランキング
+  renderCauseRank(rows);
+  // 再発防止策最新
+  renderPreventLatest(rows);
+  // 月次推移
+  renderTrend();
+  // 倉庫別月次推移
+  renderWhTrend();
+  // 発生原因・再発防止策 評価コメント
+  renderCausePreventComment();
+  // 得意先・商品コード別分析
+  renderCustomerProduct();
+  // AI自動評価コメント
+  renderTroubleComment();
+}
+
+function renderCauseRank(rows){
+  const entries=topN(cntBy(rows,r=>r['発生原因']),8).filter(e=>e[0]);
+  const max=entries[0]?.[1]||1;
+  document.getElementById('cause-rank').innerHTML=entries.length
+    ?entries.map((e,i)=>`
+        <div class="rk-row">
+          <span class="rk-n">${i+1}</span>
+          <span class="rk-lbl" title="${esc(e[0])}">${esc(trunc(e[0],22))}</span>
+          <div class="rk-bw"><div class="rk-bb" style="width:${(e[1]/max*100).toFixed(1)}%;background:${PAL[i%PAL.length]}"></div></div>
+          <span class="rk-cnt">${e[1]}件</span>
+        </div>`).join('')
+    :'<div class="empty-state">データなし</div>';
+}
+
+function renderPreventLatest(rows){
+  const items=[...rows].filter(r=>r['再発防止策']?.trim()).reverse().slice(0,5);
+  document.getElementById('prevent-latest').innerHTML=items.length
+    ?items.map(r=>`
+        <div style="padding:7px 0;border-bottom:1px solid var(--g100);font-size:.78rem">
+          <div style="color:var(--g400);font-size:.7rem;margin-bottom:2px">
+            ${(r['発生日時']||'').split(' ')[0]}
+            <span class="badge bd-b" style="margin-left:4px">${esc(r._トラブル区分||'-')}</span>
+            <span class="badge bd-o" style="margin-left:2px">${esc(r._出荷元倉庫||'-')}</span>
+          </div>
+          <div style="color:var(--g800);line-height:1.5">${esc(trunc(r['再発防止策'],60))}</div>
+        </div>`).join('')
+    :'<div style="color:var(--g400);font-size:.8rem;padding:10px 0">再発防止策の記録なし</div>';
+}
+
+function renderTrend(){
+  const whs=selWH==='全倉庫'?null:selWH;
+  // 全倉庫の月次
+  const total={};allMonths.forEach(m=>total[m]=0);
+  allRows.forEach(r=>{if(r._month)total[r._month]=(total[r._month]||0)+1;});
+  // 選択倉庫の月次（全倉庫以外のとき）
+  const sel={};allMonths.forEach(m=>sel[m]=0);
+  if(whs){allRows.filter(r=>r._出荷元倉庫===whs).forEach(r=>{if(r._month)sel[r._month]=(sel[r._month]||0)+1;});}
+  const labels=allMonths.map(k=>{const[y,m]=k.split('-');return`${y}/${parseInt(m)}月`;});
+  const ds=[{
+    label:'全倉庫',data:allMonths.map(m=>total[m]),
+    backgroundColor:'rgba(26,86,219,.15)',borderColor:'rgba(26,86,219,.6)',
+    borderWidth:1.5,fill:true,tension:.35,pointRadius:3,
+  }];
+  if(whs){ds.push({
+    label:whs,data:allMonths.map(m=>sel[m]),
+    backgroundColor:'rgba(224,36,36,.15)',borderColor:'#e02424',
+    borderWidth:2,fill:true,tension:.35,pointRadius:4,
+  });}
+  mkChart('ch-trend','line',labels,ds,{
+    plugins:{legend:{position:'top'}},
+    scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}
+  });
+}
+
+function renderWhTrend(){
+  const whList=[...new Set(allRows.map(r=>r._出荷元倉庫).filter(Boolean))].sort();
+  const top5=topN(cntBy(allRows,r=>r._出荷元倉庫),5).map(e=>e[0]);
+  const labels=allMonths.map(k=>{const[y,m]=k.split('-');return`${y}/${parseInt(m)}月`;});
+  const ds=top5.map((wh,i)=>({
+    label:wh,
+    data:allMonths.map(m=>allRows.filter(r=>r._month===m&&r._出荷元倉庫===wh).length),
+    borderColor:PAL[i],backgroundColor:PAL[i]+'40',borderWidth:2,fill:false,tension:.35,pointRadius:3,
+  }));
+  mkChart('ch-wh-trend','line',labels,ds,{
+    plugins:{legend:{position:'top',labels:{font:{size:10}}}},
+    scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}
+  });
+}
+
+function mkDoughnut(id,map){
+  const e=topN(map,8);
+  mkChart(id,'doughnut',e.map(x=>x[0]),[{
+    data:e.map(x=>x[1]),
+    backgroundColor:e.map((_,i)=>PAL[i%PAL.length]+'cc'),
+    borderColor:e.map((_,i)=>PAL[i%PAL.length]),borderWidth:2}],
+    {plugins:{legend:{position:'right',labels:{font:{size:10},boxWidth:12}}},cutout:'52%'});
+}
+function mkHBar(id,entries,color){
+  mkChart(id,'bar',entries.map(e=>e[0]),[{
+    label:'件数',data:entries.map(e=>e[1]),
+    backgroundColor:color+'99',borderColor:color,borderWidth:2,borderRadius:4}],
+    {indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}});
+}
+function showChartFallback(id,type,labels,datasets,opts){
+  // canvas を消さず隠す → 再描画時も getElementById が壊れない
+  const cvs=document.getElementById(id);
+  if(cvs) cvs.style.display='none';
+  // 兄弟フォールバック div を使い回す
+  const wrap=cvs?cvs.parentElement:document.getElementById(id+'-fb')?.parentElement;
+  if(!wrap)return;
+  let fb=document.getElementById(id+'-fb');
+  if(!fb){fb=document.createElement('div');fb.id=id+'-fb';fb.style.cssText='width:100%;overflow:auto;padding:4px 2px';wrap.appendChild(fb);}
+  fb.style.display='block';
+  const d0=datasets[0]?.data||[];
+  const mx=Math.max(...d0,1);
+  const tot=d0.reduce((s,v)=>s+v,0)||1;
+  if(!labels.length){fb.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af;font-size:.8rem">データなし</div>';return;}
+  if(type==='doughnut'){
+    fb.innerHTML='<div>'+labels.map((l,i)=>
+      `<div style="display:flex;align-items:center;gap:6px;padding:4px 2px;border-bottom:1px solid #f3f4f6;font-size:.78rem">
+        <div style="width:9px;height:9px;border-radius:50%;background:${PAL[i%PAL.length]};flex-shrink:0"></div>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}</span>
+        <span style="font-weight:700;min-width:22px;text-align:right">${d0[i]}</span>
+        <span style="color:#9ca3af;font-size:.7rem;margin-left:4px;min-width:30px;text-align:right">${Math.round(d0[i]/tot*100)}%</span>
+      </div>`).join('')+'</div>';
+  }else if(type==='bar'){
+    fb.innerHTML='<div>'+labels.map((l,i)=>
+      `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:.75rem">
+        <span style="width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;color:#4b5563">${esc(l)}</span>
+        <div style="flex:1;height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${(d0[i]/mx*100).toFixed(1)}%;background:#1a56db;border-radius:4px"></div>
+        </div>
+        <span style="min-width:24px;text-align:right;font-weight:700;font-size:.72rem">${d0[i]}</span>
+      </div>`).join('')+'</div>';
+  }else{
+    // line → テーブル（変数名 trows で衝突回避）
+    const trows=labels.map((l,i)=>
+      `<tr><td style="padding:3px 8px;color:#4b5563;font-size:.73rem;white-space:nowrap;border-bottom:1px solid #f3f4f6">${esc(l)}</td>${
+        datasets.map(ds=>`<td style="padding:3px 8px;text-align:right;font-weight:700;font-size:.73rem;border-bottom:1px solid #f3f4f6">${ds.data[i]??0}</td>`).join('')
+      }</tr>`).join('');
+    fb.innerHTML=`<table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="padding:4px 8px;background:#f3f4f6;font-size:.73rem;text-align:left;border-bottom:1px solid #e5e7eb">月</th>
+        ${datasets.map(ds=>`<th style="padding:4px 8px;background:#f3f4f6;font-size:.73rem;text-align:right;border-bottom:1px solid #e5e7eb">${esc(ds.label)}</th>`).join('')}
+      </tr></thead>
+      <tbody>${trows}</tbody>
+    </table>`;
+  }
+}
+function mkChart(id,type,labels,datasets,opts={}){
+  // 既存フォールバック非表示
+  const fb=document.getElementById(id+'-fb');if(fb)fb.style.display='none';
+  if(typeof Chart==='undefined'){showChartFallback(id,type,labels,datasets,opts);return;}
+  try{
+    if(charts[id]){charts[id].destroy();delete charts[id];}
+    const el=document.getElementById(id);if(!el)return;
+    el.style.display='';
+    charts[id]=new Chart(el,{type,data:{labels,datasets},options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      ...opts}});
+  }catch(e){
+    console.error('mkChart error:',id,e);
+    showChartFallback(id,type,labels,datasets,opts);
+  }
+}
+
+// ══════════════════════════════════════════════
+// CAUSE & PREVENTION COMMENT (② 原因・防止策評価)
+// ══════════════════════════════════════════════
+function renderCausePreventComment(){
+  const rows=getRows(),n=rows.length;
+  const el=document.getElementById('cause-prevent-comment');
+  if(!el)return;
+  if(!n){el.innerHTML='';return;}
+
+  const [y,mo]=selYM.split('-');
+  const mLabel=`${y}年${parseInt(mo)}月`;
+  const wLabel=selWH==='全倉庫'?'全倉庫':selWH;
+
+  /* ── 発生原因集計 ── */
+  const causeMap=cntBy(rows,r=>r['発生原因']);
+  const causeTop=topN(causeMap,8).filter(e=>e[0]);
+  const repeatCauses=causeTop.filter(([,c])=>c>=2);
+  const noAdv=rows.filter(r=>!r['再発防止策']?.trim()).length;
+  const noAdvR=Math.round(noAdv/n*100);
+
+  /* 工程別分類 */
+  const procKW={
+    '倉庫内作業':['梱包','梱包材','ピッキング','仕分','積み付け','検品','荷役','作業','倉庫','棚','紛失'],
+    '輸配送':   ['配送','運送','輸送','ドライバー','車両','路線','中継','取扱','荷扱','積替'],
+    '受発注':   ['発注','受注','伝票','注文','品番','誤品','数量','品違い','コード'],
+    '不明・調査中':['不明','調査中','原因特定','確認中','不詳'],
+  };
+  const procCnt={};Object.keys(procKW).forEach(k=>procCnt[k]=0);
+  causeTop.forEach(([cause,cnt])=>{
+    const cl=cause;
+    let hit=false;
+    for(const[cat,kws] of Object.entries(procKW)){
+      if(kws.some(k=>cl.includes(k))){procCnt[cat]+=cnt;hit=true;break;}
+    }
+    if(!hit)procCnt['倉庫内作業']+=cnt;
+  });
+  const topProc=Object.entries(procCnt).sort((a,b)=>b[1]-a[1])[0];
+  const topProcPct=Math.round(topProc[1]/n*100);
+  const procBreakdown=Object.entries(procCnt).filter(([,v])=>v>0)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([k,v])=>`${k}：${v}件（${Math.round(v/n*100)}%）`).join('　');
+
+  /* 個人 vs 仕組み判定 */
+  const indivKW=['不注意','確認不足','ミス','誤り','勘違い','うっかり','見落とし','怠慢'];
+  const sysKW  =['手順','基準','マニュアル','工程','仕組み','システム','ルール','チェック','設備'];
+  let indivCnt=0,sysCnt=0;
+  causeTop.forEach(([cause,cnt])=>{
+    if(indivKW.some(k=>cause.includes(k)))indivCnt+=cnt;
+    else if(sysKW.some(k=>cause.includes(k)))sysCnt+=cnt;
+  });
+  const causeType=indivCnt>sysCnt
+    ?'個人起因（注意・確認不足系）が多い傾向'
+    :sysCnt>indivCnt
+      ?'仕組み・工程起因が多い傾向'
+      :'個人・仕組みの複合要因が見受けられる';
+  const causeTypeAdv=indivCnt>sysCnt
+    ?'個人の注意喚起だけでなく、工程・仕組みの改善を並行して検討することが有効である。'
+    :sysCnt>0
+      ?'仕組みに起因する問題は手順書・チェックリストの整備で再発防止できる可能性が高い。'
+      :'原因テキストの詳細記入により、より精度の高い分類が可能になる。';
+
+  /* ── 再発防止策の品質評価 ── */
+  const advRows=rows.filter(r=>r['再発防止策']?.trim()).slice().reverse().slice(0,5);
+  const highKW=['義務化','チェックリスト','手順書','バーコード','ダブルチェック','基準書','改訂','フロー','システム'];
+  const lowKW =['注意した','共有した','周知した','気をつける','注意する','伝えた'];
+  let hCnt=0,lCnt=0,mCnt=0;
+  advRows.forEach(r=>{
+    const t=r['再発防止策'];
+    if(highKW.some(k=>t.includes(k)))hCnt++;
+    else if(lowKW.some(k=>t.includes(k))||t.trim().length<20)lCnt++;
+    else mCnt++;
+  });
+  const totalEval=advRows.length;
+  let qLv='評価データなし',qColor='#9ca3af',qMsg='';
+  if(totalEval>0){
+    const hr=hCnt/totalEval,lr=lCnt/totalEval;
+    if(hr>=0.6){
+      qLv='高（仕組み対策が多い）';qColor='#0e9f6e';
+      qMsg=`直近${totalEval}件の防止策のうち${hCnt}件はチェックリスト整備・手順変更など仕組みに落とし込んだ対策が見受けられ、実効性が高いと評価できる。`;
+    }else if(lr>=0.5){
+      qLv='低（精神論・共有止まりが多い）';qColor='#e02424';
+      qMsg=`直近${totalEval}件の防止策のうち${lCnt}件が「注意した・共有した」等の精神論に留まっており、仕組みによる再発防止に改善余地がある。`;
+    }else{
+      qLv='中（具体性にばらつきがある）';qColor='#d97706';
+      qMsg=`直近${totalEval}件の防止策は具体性にばらつきがある。チェックリスト・手順書等の仕組み化対策の割合を増やすことで実効性が向上する。`;
+    }
+  }
+
+  /* ── 原因→対策の整合性チェック（上位3） ── */
+  const top3=causeTop.slice(0,3);
+  const allAdvText=rows.map(r=>r['再発防止策']||'').join(' ');
+  const aligned=[],unaligned=[];
+  top3.forEach(([cause,cnt])=>{
+    const kws=cause.replace(/[、。・\s]/g,' ').split(' ').filter(w=>w.length>=3);
+    kws.some(k=>allAdvText.includes(k))?aligned.push([cause,cnt]):unaligned.push([cause,cnt]);
+  });
+
+  /* ── 改善推奨アクション（優先度順・最大3件） ── */
+  const acts=[];
+  if(noAdvR>=50)
+    acts.push({p:'🔴',t:`再発防止策の未入力率${noAdvR}%（${noAdv}件）を今週末までに解消する：担当者を特定し個別入力依頼メールを送付する`});
+  if(unaligned.length>0)
+    acts.push({p:'🔴',t:`上位原因「${trunc(unaligned[0][0],15)}」に対応する防止策を担当管理者が5営業日以内に立案・システム入力する`});
+  if(repeatCauses.length>0)
+    acts.push({p:'⚠️',t:`繰り返し原因${repeatCauses.length}件について5Why分析を実施し、「注意する」以外の仕組み対策に改善する`});
+  if(lCnt>0&&totalEval>0)
+    acts.push({p:'⚠️',t:`「注意した・共有した」止まりの防止策${lCnt}件をチェックリスト化・手順書改訂等の仕組み対策に書き直す`});
+  acts.push({p:'🔵',t:'月次会議で「原因Top3×防止策の対応状況」をセットで報告する議題を定例化する'});
+  const top3Acts=acts.slice(0,3);
+
+  /* ── HTML出力 ── */
+  el.innerHTML=`
+  <div style="background:#f5f0ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:16px 20px;margin-top:14px">
+    <div style="font-size:.85rem;font-weight:700;color:#7c3aed;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      🔍 発生原因・再発防止策 自動評価コメント
+      <span style="font-size:.72rem;font-weight:400;color:#9ca3af">${mLabel} ／ ${wLabel}</span>
+    </div>
+    <div style="display:grid;gap:11px;font-size:.8rem;line-height:1.75;color:#1f2937">
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #7c3aed">
+        <div style="font-weight:700;color:#7c3aed;margin-bottom:7px">📊 発生原因の傾向評価</div>
+        ${noAdvR>=50?`<div style="background:#fde8e8;border:1px solid #f8b4b4;border-radius:6px;padding:5px 10px;margin-bottom:8px;font-size:.75rem;color:#c81e1e">⚠️ 再発防止策の未入力率が${noAdvR}%（${noAdv}件）と高水準のため、原因分析の精度が低下している可能性がある。</div>`:''}
+        <div style="margin-bottom:5px"><span style="font-weight:700">工程別分類　</span>${procBreakdown}</div>
+        <div style="margin-bottom:5px"><span style="font-weight:700">主要工程　　</span>${topProc[0]}が${topProcPct}%を占めており、${topProc[0].includes('倉庫')?'倉庫内の作業改善':topProc[0].includes('輸配送')?'運送会社との連携強化':topProc[0].includes('受発注')?'受発注フローの見直し':'原因の詳細調査'}が優先課題と考えられる。</div>
+        <div style="margin-bottom:5px"><span style="font-weight:700">繰り返し発生</span>　${repeatCauses.length>0?`${repeatCauses.length}件の原因が複数回発生（${repeatCauses.map(([k,v])=>`「${trunc(k,12)}」${v}件`).join('・')}）しており、根本対策が未実施の可能性が高い。`:'繰り返し発生原因は確認されていない。対策が機能していると考えられる。'}</div>
+        <div><span style="font-weight:700">原因の性質　</span>${causeType}。${causeTypeAdv}</div>
+      </div>
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid ${qColor}">
+        <div style="font-weight:700;margin-bottom:7px;color:${qColor}">🛡️ 再発防止策の品質評価　<span style="font-size:.85em">${qLv}</span></div>
+        ${totalEval>0?`
+        <div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="background:#d1fae5;color:#0e9f6e;padding:2px 9px;border-radius:12px;font-size:.71rem;font-weight:700">高品質 ${hCnt}件</span>
+          <span style="background:#fef3c7;color:#d97706;padding:2px 9px;border-radius:12px;font-size:.71rem;font-weight:700">普通 ${mCnt}件</span>
+          <span style="background:#fde8e8;color:#e02424;padding:2px 9px;border-radius:12px;font-size:.71rem;font-weight:700">改善要 ${lCnt}件</span>
+          <span style="color:#9ca3af;font-size:.71rem;padding:2px 4px">（直近${totalEval}件を評価）</span>
+        </div>
+        <div>${qMsg}</div>`
+        :'<div style="color:#9ca3af">再発防止策の記録がありません。全件の入力が必要です。</div>'}
+      </div>
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #0891b2">
+        <div style="font-weight:700;color:#0891b2;margin-bottom:8px">🔗 原因→対策の整合性チェック（上位${top3.length}原因）</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          ${top3.map(([cause,cnt])=>{
+            const ok=aligned.some(([k])=>k===cause);
+            return`<div style="display:flex;align-items:flex-start;gap:8px">
+              <span style="flex-shrink:0;font-size:.71rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-top:2px;${ok?'background:#d1fae5;color:#0e9f6e':'background:#fde8e8;color:#e02424'}">
+                ${ok?'✅ 対応済':'❌ 要対応'}
+              </span>
+              <span>「${esc(trunc(cause,28))}」（${cnt}件）</span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:.74rem;border-radius:6px;padding:6px 9px;${unaligned.length>0?'background:#fef9c3;color:#854d0e':'background:#d1fae5;color:#065f46'}">
+          ${unaligned.length>0
+            ?`💡 【要対応】の原因に対応する再発防止策をシステムに入力することで、対策の抜け漏れが解消されます。`
+            :`✅ 上位${top3.length}原因すべてに対策が講じられています。引き続き効果検証を継続してください。`}
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #1a56db">
+        <div style="font-weight:700;color:#1a56db;margin-bottom:8px">🎯 改善推奨アクション（優先度順）</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${top3Acts.map((a,i)=>`
+            <div style="display:flex;gap:8px;align-items:flex-start">
+              <span style="flex-shrink:0;font-weight:800;font-size:.85rem">${a.p}</span>
+              <span>${i+1}. ${esc(a.t)}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════
+// CUSTOMER & PRODUCT ANALYSIS (②-B)
+// ══════════════════════════════════════════════
+function renderCustomerProduct(){
+  const rows=getRows();
+  const n=rows.length;
+
+  const setEl=(id,html)=>{const e=document.getElementById(id);if(e)e.innerHTML=html;};
+
+  if(!n){
+    setEl('custprod-strip','');
+    setEl('customer-rank','<div class="empty-state">データなし</div>');
+    setEl('product-rank','<div class="empty-state">データなし</div>');
+    setEl('custprod-repeat','');
+    return;
+  }
+
+  /* ── 集計 ── */
+  const custMap=cntBy(rows,r=>r['得意先コード']);
+  const prodMap=cntBy(rows,r=>r['商品コード']);
+  const custTop=topN(custMap,10).filter(e=>e[0]);
+  const prodTop=topN(prodMap,10).filter(e=>e[0]);
+  const custUniq=Object.keys(custMap).filter(k=>k).length;
+  const prodUniq=Object.keys(prodMap).filter(k=>k).length;
+  const topCust=custTop[0];
+  const topProd=prodTop[0];
+
+  /* ── サマリーカード ── */
+  const sc=[];
+  if(custUniq>0) sc.push(`
+    <div class="sum-card">
+      <div class="sum-lbl">🏢 影響得意先数</div>
+      <div class="sum-val">${custUniq}</div>
+      <div class="sum-sub">社・コード</div>
+    </div>`);
+  if(prodUniq>0) sc.push(`
+    <div class="sum-card purple">
+      <div class="sum-lbl">📦 影響商品数</div>
+      <div class="sum-val">${prodUniq}</div>
+      <div class="sum-sub">品目・コード</div>
+    </div>`);
+  if(topCust){
+    const cnt=topCust[1];
+    const tied=custTop.filter(e=>e[1]===cnt);
+    const label=tied.length>1?`${esc(tied[0][0])} 他${tied.length-1}コード`:esc(topCust[0]);
+    const tip=tied.map(e=>e[0]).join('・');
+    sc.push(`
+    <div class="sum-card ${cnt/n>=0.3?'danger':'warn'}" title="${esc(tip)}">
+      <div class="sum-lbl">🔺 最多得意先コード</div>
+      <div class="sum-val sm">${label}</div>
+      <div class="sum-sub">${cnt}件（${Math.round(cnt/n*100)}%）${tied.length>1?` ・同数${tied.length}コード`:''}</div>
+    </div>`);
+  }
+  if(topProd){
+    const cnt=topProd[1];
+    const tied=prodTop.filter(e=>e[1]===cnt);
+    const label=tied.length>1?`${esc(tied[0][0])} 他${tied.length-1}コード`:esc(topProd[0]);
+    const tip=tied.map(e=>e[0]).join('・');
+    sc.push(`
+    <div class="sum-card ${cnt/n>=0.3?'danger':'warn'}" title="${esc(tip)}">
+      <div class="sum-lbl">🔺 最多商品コード</div>
+      <div class="sum-val sm">${label}</div>
+      <div class="sum-sub">${cnt}件（${Math.round(cnt/n*100)}%）${tied.length>1?` ・同数${tied.length}コード`:''}</div>
+    </div>`);
+  }
+  setEl('custprod-strip',sc.join(''));
+
+  /* ── ランキング共通ヘルパー ── */
+  function mkRankList(entries,total){
+    if(!entries.length) return '<div class="empty-state">コードデータなし</div>';
+    const mx=entries[0][1];
+    let rank=0,prevCnt=null;
+    // 繰り返し（2件以上）かどうか
+    return entries.map((e,i)=>{
+      if(e[1]!==prevCnt){rank=i+1;prevCnt=e[1];}
+      const pct=Math.round(e[1]/total*100);
+      const isRepeat=e[1]>=2;
+      const tieMark=(i>0&&entries[i-1][1]===e[1])||(i<entries.length-1&&entries[i+1][1]===e[1])?'<span style="font-size:.6rem;color:var(--g400);margin-left:1px">＝</span>':'';
+      return`<div class="rk-row">
+        <span class="rk-n">${rank}${tieMark}</span>
+        <span class="rk-lbl" title="${esc(e[0])}">${esc(trunc(e[0],18))}${isRepeat?` <span class="badge bd-r" style="font-size:.65rem;padding:1px 5px">${e[1]}回</span>`:''}</span>
+        <div class="rk-bw"><div class="rk-bb" style="width:${(e[1]/mx*100).toFixed(1)}%;background:${PAL[i%PAL.length]}"></div></div>
+        <span class="rk-cnt">${e[1]}件</span>
+        <span style="width:30px;text-align:right;font-size:.7rem;color:var(--g400);flex-shrink:0">${pct}%</span>
+      </div>`;
+    }).join('');
+  }
+
+  setEl('customer-rank', mkRankList(custTop,n));
+  setEl('product-rank',  mkRankList(prodTop,n));
+
+  /* ── 繰り返し得意先・商品の注記 ── */
+  const repeatCust=custTop.filter(([,c])=>c>=3);
+  const repeatProd=prodTop.filter(([,c])=>c>=3);
+  const notes=[];
+  if(repeatCust.length>0){
+    notes.push(`<span class="badge bd-r" style="margin-right:4px">🏢 繰り返し得意先</span>`+
+      repeatCust.map(([k,c])=>`<b>${esc(k)}</b>（${c}件）`).join('・'));
+  }
+  if(repeatProd.length>0){
+    notes.push(`<span class="badge bd-p" style="margin-right:4px">📦 繰り返し商品</span>`+
+      repeatProd.map(([k,c])=>`<b>${esc(k)}</b>（${c}件）`).join('・'));
+  }
+  setEl('custprod-repeat', notes.length
+    ?`<div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:10px 13px;font-size:.78rem;line-height:1.8;display:flex;flex-direction:column;gap:5px">
+        <div style="font-weight:700;color:var(--g600);margin-bottom:2px">⚠️ 3件以上集中している得意先・商品コード</div>
+        ${notes.map(n=>`<div>${n}</div>`).join('')}
+      </div>`
+    :'');
+}
+
+// ══════════════════════════════════════════════
+// TROUBLE COMMENT (② AI自動評価)
+// ══════════════════════════════════════════════
+function renderTroubleComment(){
+  const rows=getRows(),prev=getPrevRows();
+  const n=rows.length,pn=prev.length;
+  const el=document.getElementById('trouble-comment');
+  if(!el)return;
+  if(!n){el.innerHTML='';return;}
+
+  const [y,mo]=selYM.split('-');
+  const mLabel=`${y}年${parseInt(mo)}月`;
+  const wLabel=selWH==='全倉庫'?'全倉庫':selWH;
+
+  /* ── 集計 ── */
+  const tcMap=cntBy(rows,r=>r._トラブル区分);
+  const plMap=cntBy(rows,r=>r._発生場所);
+  const carMap=cntBy(rows,r=>r._運送会社名);
+  const causeTop=topN(cntBy(rows,r=>r['発生原因']),5).filter(e=>e[0]);
+  const noAdv=rows.filter(r=>!r['再発防止策']?.trim()).length;
+  const noAdvR=Math.round(noAdv/n*100);
+  const haji=tcMap['荷役トラブル']||0,haisou=tcMap['配送トラブル']||0;
+  const hajiP=Math.round(haji/n*100),haisouP=Math.round(haisou/n*100);
+  const cust=plMap['お客様先']||0,custP=Math.round(cust/n*100);
+  const topCar=topN(carMap,1)[0];
+  const topTC=topN(tcMap,1)[0];
+  const repeat=causeTop.filter(([,c])=>c>=2);
+  const delta=pn>0?n-pn:null;
+  const dPct=pn>0?Math.round((n-pn)/pn*100):null;
+
+  /* ── 【全体評価】 ── */
+  let overall='';
+  if(delta===null){
+    overall=`${mLabel}の${wLabel}におけるトラブルは計${n}件を記録した。前月データがないため比較分析はできないが、今月のデータをベースラインとして継続的な管理に活用されたい。`;
+  }else if(dPct>=30){
+    overall=`${mLabel}の${wLabel}は${n}件で、前月（${pn}件）比+${dPct}%と大幅な増加が見受けられる。速やかな原因精査と対策強化が求められる状況といえる。`;
+  }else if(dPct>=10){
+    overall=`${mLabel}の${wLabel}は${n}件で、前月（${pn}件）比+${dPct}%の増加傾向が見受けられる。引き続き注意深くモニタリングすることが望ましい。`;
+  }else if(dPct<=-30){
+    overall=`${mLabel}の${wLabel}は${n}件で、前月（${pn}件）比${dPct}%減と顕著な改善が確認された。実施済み対策の効果が現れていると考えられる。`;
+  }else if(dPct<=-10){
+    overall=`${mLabel}の${wLabel}は${n}件で、前月（${pn}件）比${dPct}%の減少が確認された。改善傾向にあると考えられるが、継続的な取り組みが重要である。`;
+  }else{
+    overall=`${mLabel}の${wLabel}は${n}件で、前月（${pn}件）比${dPct>0?'+':''}${dPct}%と概ね横ばい傾向にある。現状維持を継続しながら、根本的な改善策の検討が求められる。`;
+  }
+
+  /* ── 【トラブル特性の特徴】 ── */
+  const feats=[];
+  // トラブル区分
+  if(hajiP>=70) feats.push(`トラブル区分は荷役トラブルが${hajiP}%と大半を占めており、倉庫内作業に起因する問題が集中していると考えられる。`);
+  else if(haisouP>=70) feats.push(`トラブル区分は配送トラブルが${haisouP}%と大半を占めており、輸配送工程での課題が主因と考えられる。`);
+  else feats.push(`トラブル区分は荷役${hajiP}%・配送${haisouP}%と分散しており、倉庫内外の双方に課題が分布している状況が見受けられる。`);
+  // 発生場所
+  if(custP>=70) feats.push(`発生場所はお客様先が${custP}%を占めており、出荷時点では顕在化しにくいトラブルが多いことが示唆される。`);
+  else if(custP>=50) feats.push(`発生場所はお客様先${custP}%・配送中${100-custP}%と分散しており、出荷後の各工程での品質管理が課題と考えられる。`);
+  else feats.push(`発生場所は配送中が${100-custP}%と多く、輸送中の取り扱いに改善余地があると考えられる。`);
+  // 最多原因
+  if(causeTop.length>0){
+    const tc=causeTop[0];
+    if(tc[1]>=2) feats.push(`最多原因「${trunc(tc[0],18)}」が${tc[1]}件と繰り返し発生しており、恒久対策の立案・実施が急務と考えられる。`);
+    else feats.push(`発生原因は「${trunc(tc[0],15)}」を筆頭に${causeTop.length}種類が確認されており、個別事象への対応が求められる。`);
+  }
+  // 運送会社集中
+  if(topCar&&topCar[1]/n>=0.5) feats.push(`運送会社別では${topCar[0]}が${Math.round(topCar[1]/n*100)}%（${topCar[1]}件）と集中しており、同社との品質改善協議の余地がある。`);
+
+  /* ── 【重点管理ポイント】 ── */
+  const pts=[];
+  if(delta!==null&&dPct>=20) pts.push(`前月比+${dPct}%増のため、全件の発生原因を速やかに精査し是正処置を実施する`);
+  if(repeat.length>0) pts.push(`「${trunc(repeat[0][0],15)}」など${repeat.length}件の繰り返し原因に対し、根本対策（4M分析）を立案・実施する`);
+  if(topCar&&topCar[1]/n>=0.5) pts.push(`${topCar[0]}（${Math.round(topCar[1]/n*100)}%集中）との品質基準・KPIを設定し改善を要請する`);
+  if(custP>=70) pts.push(`お客様先発生${custP}%を受け、出荷前検品の強化と梱包仕様の見直しを実施する`);
+  if(noAdvR>=50) pts.push(`再発防止策の未入力率${noAdvR}%（${noAdv}件）は高水準のため、担当者への入力徹底を督促する`);
+  else if(noAdv>0) pts.push(`再発防止策が未入力の${noAdv}件について、速やかに対策を記録・実施する`);
+  if(hajiP>=70) pts.push(`荷役トラブル${hajiP}%の集中を受け、倉庫内作業手順・梱包基準を総点検する`);
+  while(pts.length<2) pts.push(['現在の対策を継続しながら、原因の細分化分析を実施する','月次KPI（件数・防止策入力率）を管理会議で共有しモニタリングを継続する'][pts.length]);
+
+  /* ── 【来月への申し送り】 ── */
+  let nxt='';
+  if(delta!==null&&dPct>=20){
+    nxt=`来月は今月実施した是正処置の効果を検証し、件数${Math.max(Math.round(n*0.8),pn)}件以下への改善を目標とする。原因分析結果を次回管理会議で報告されたい。`;
+  }else if(delta!==null&&dPct<=-20){
+    nxt=`来月も改善傾向の維持に注力し、今月の対策内容を関係倉庫・運送会社へ横展開することを推奨する。`;
+  }else if(repeat.length>0){
+    nxt=`来月は繰り返し原因「${trunc(repeat[0][0],15)}」の恒久対策効果を検証する。5Why・4M分析での深掘りも検討されたい。`;
+  }else{
+    nxt=`来月も引き続きトラブル動向を注視しつつ、再発防止策の確実な実施と記録の徹底により品質基盤の強化を図ることが求められる。`;
+  }
+
+  /* ── HTML出力 ── */
+  el.innerHTML=`
+  <div style="background:#f0f5ff;border:1.5px solid #93b4f8;border-radius:10px;padding:16px 20px;margin-top:16px">
+    <div style="font-size:.85rem;font-weight:700;color:#1a56db;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      💬 特性分析 自動評価コメント
+      <span style="font-size:.72rem;font-weight:400;color:#9ca3af">${mLabel} ／ ${wLabel}</span>
+    </div>
+    <div style="display:grid;gap:12px;font-size:.8rem;line-height:1.75;color:#1f2937">
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #1a56db">
+        <div style="font-weight:700;color:#1a56db;margin-bottom:4px">📋 全体評価</div>
+        <div>${esc(overall)}</div>
+      </div>
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #7c3aed">
+        <div style="font-weight:700;color:#7c3aed;margin-bottom:6px">🔬 トラブル特性の特徴</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${feats.map(f=>`<div style="display:flex;gap:6px"><span style="color:#7c3aed;flex-shrink:0">▸</span><span>${esc(f)}</span></div>`).join('')}
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #e02424">
+        <div style="font-weight:700;color:#e02424;margin-bottom:6px">⚠️ 重点管理ポイント</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${pts.slice(0,4).map((p,i)=>`<div style="display:flex;gap:7px"><span style="color:#e02424;font-weight:800;flex-shrink:0">${i+1}.</span><span>${esc(p)}</span></div>`).join('')}
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:8px;padding:11px 14px;border-left:3px solid #0e9f6e">
+        <div style="font-weight:700;color:#0e9f6e;margin-bottom:4px">📅 来月への申し送り</div>
+        <div>${esc(nxt)}</div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════
+// ADVICE GENERATION
+// ══════════════════════════════════════════════
+function renderAdvice(){
+  const rows=getRows();const prev=getPrevRows();const n=rows.length;
+  if(!n){
+    document.getElementById('advice-list').innerHTML=`<div class="empty-state">今月（${selYM.replace('-','年')}月）の${selWH}データがありません</div>`;
+    return;
+  }
+  const cards=[];
+  const [y,mo]=selYM.split('-');const monthLabel=`${y}年${parseInt(mo)}月`;
+  const whLabel=selWH==='全倉庫'?'全倉庫':'【'+selWH+'】';
+
+  // 共通集計
+  const pn=prev.length;
+  const causeMap=cntBy(rows,r=>r['発生原因']);
+  const repeatCauses=topN(causeMap,5).filter(([,c])=>c>=2);
+  const tcMap=cntBy(rows,r=>r._トラブル区分);
+  const topTC=topN(tcMap,1)[0];
+  const carMap=cntBy(rows,r=>r._運送会社名);
+  const topCar=topN(carMap,1)[0];
+  const plMap=cntBy(rows,r=>r._発生場所);
+  const atCust=plMap['お客様先']||0;
+  const qty=rows.reduce((s,r)=>s+r._qty,0);
+  const topQtyRows=[...rows].sort((a,b)=>b._qty-a._qty).slice(0,3).filter(r=>r._qty>0);
+  const noAdv=rows.filter(r=>!r['再発防止策']?.trim()).length;
+
+  // ── A. 総合トレンド ──
+  if(pn>0){
+    const delta=n-pn,pct=Math.round(delta/pn*100);
+    if(pct>=30){
+      cards.push({lv:'high',priority:'🔴 緊急',
+        title:`${monthLabel} ${whLabel}：前月比 +${pct}% 急増`,
+        evidence:`今月 ${n}件 ／ 前月 ${pn}件（+${delta}件）`,
+        actions:['今月の発生原因を全件確認し、共通要因を特定する','倉庫・運送会社への注意喚起を実施する','週次モニタリングに切り替え、件数を注視する'],
+        detail:{
+          why:`前月比+${pct}%（+${delta}件）の急増は特定要因の集中発生を示す緊急シグナルである。放置すると顧客クレーム増加・返品対応コストの拡大に直結するリスクがあり、今月中の原因特定と是正処置が最優先となる。`,
+          steps:[
+            {act:'今月の発生原因を全件確認し、共通要因を特定する',how:`全${n}件の「発生原因」列をキーワードでグルーピングし、3件以上共通する要因を最重要原因として抽出する。担当者が異なる表現を使っていても同義語でまとめると漏れなく特定できる。`,tip:'抽出後は「発生工程・担当者・時間帯」の軸で再分類すると隠れた共通因子が見つかりやすい。'},
+            {act:'倉庫・運送会社への注意喚起を実施する',how:'特定した共通原因を文書化し、関係倉庫・運送会社責任者へ書面で共有する。対策実施期限（5営業日以内）と対策計画書の提出を明記する。',tip:'「注意してください」だけでなく、具体的な作業手順の変更点まで明示すると改善効果が高まる。'},
+            {act:'週次モニタリングに切り替え、件数を注視する',how:'今月末まで毎週月曜日に件数を集計し前週比で増減を確認する。増加が継続する場合は追加対策を即時検討する。',tip:'週次件数をチャットツール等で関係者へ共有すると当事者意識が高まる。'},
+          ],
+          kpi:`翌月のトラブル件数を今月比80%以下（${Math.ceil(n*0.8)}件以下）に抑制する。共通原因の再発件数0件を目標とする。`,
+          risk:`対策なしで推移した場合、翌月も同水準または更なる増加となる可能性が高い。顧客満足度の低下・返品・クレーム対応コストの増大に直結する。`,
+        }
+      });
+    } else if(pct<=-30){
+      cards.push({lv:'good',priority:'🟢 改善',
+        title:`${monthLabel} ${whLabel}：前月比 ${pct}% 減少`,
+        evidence:`今月 ${n}件 ／ 前月 ${pn}件（${delta}件）`,
+        actions:['実施済み対策の効果を記録し、横展開する','引き続き再発防止策の確実な実施を継続する'],
+        detail:{
+          why:`前月比${pct}%（${Math.abs(delta)}件減）の顕著な改善は、これまでの取り組みの成果が数値に現れていると考えられる。この改善効果を定着・横展開することで組織全体の品質底上げにつなげることができる。`,
+          steps:[
+            {act:'実施済み対策の効果を記録し、横展開する',how:'今月までに実施した対策を「対策名・実施日・担当者・効果（件数変化）」の形式でドキュメント化し、他倉庫・担当者へ月次会議やメールで共有する。',tip:'成功事例の「見える化」は他拠点のモチベーション向上にも有効である。'},
+            {act:'引き続き再発防止策の確実な実施を継続する',how:'対策実施状況を月次チェックリストで確認し、実施漏れがないかを定期点検する。仕組み（手順書・チェックリスト）を整備して属人化を防ぐ。',tip:'改善が進んでいる今こそ、仕組みを整備する好機である。'},
+          ],
+          kpi:`翌月も今月以下の件数（${n}件以下）を維持する。横展開先拠点でも件数10%以上の削減を目標とする。`,
+          risk:`改善策の実施を中断・形骸化させると翌月以降に反動増となるリスクがある。定期的な効果検証が継続のカギとなる。`,
+        }
+      });
+    } else {
+      cards.push({lv:'info',priority:'🔵 経過観察',
+        title:`${monthLabel} ${whLabel}：前月比 ${pct>0?'+':''}${pct}% 横ばい`,
+        evidence:`今月 ${n}件 ／ 前月 ${pn}件`,
+        actions:['現在の対策を継続しつつ、原因の細分化分析を実施する'],
+        detail:{
+          why:`件数横ばいは現在の対策が「現状維持」に留まっている可能性を示す。根本原因が未解決のまま安定している場合、突発的な増加リスクが潜在している。`,
+          steps:[
+            {act:'現在の対策を継続しつつ、原因の細分化分析を実施する',how:'発生原因を「誰が・どこで・何を・なぜ」の4視点で分類し直す。これまでと異なる切り口（時間帯・商品カテゴリ・担当者別）でデータを見直し新たな改善ポイントを探る。',tip:'月次データが蓄積されてきたら季節性・曜日別傾向の分析も有効である。'},
+          ],
+          kpi:`翌月件数を今月比10%以上削減（${Math.ceil(n*0.9)}件以下）することを当面の目標とする。`,
+          risk:`横ばいが3ヶ月以上継続する場合、慢性的な品質課題が固定化している可能性があり抜本的な対策見直しが必要となる。`,
+        }
+      });
+    }
+  } else {
+    cards.push({lv:'info',priority:'🔵 初月データ',
+      title:`${monthLabel} ${whLabel}：計 ${n}件`,
+      evidence:'前月比較データなし（最初の分析月）',
+      actions:['今月のデータをベースラインとして記録する','次月からの前月比分析に備え、原因・対策の入力を徹底する'],
+      detail:{
+        why:`初月データのため比較分析はできないが、今月の記録が今後の品質管理の基準（ベースライン）となる。入力品質が高いほど来月以降の分析精度が上がる。`,
+        steps:[
+          {act:'今月のデータをベースラインとして記録する',how:'今月の件数・原因・倉庫別分布をPDF出力して保存する。来月以降の比較基準として管理台帳に記録する。',tip:'PDF出力ボタンから印刷・保存しておくと管理会議での共有に便利である。'},
+          {act:'次月からの前月比分析に備え、原因・対策の入力を徹底する',how:'未入力の「発生原因」「再発防止策」を今月末までに入力完了させる。担当者への記入依頼を管理者から周知する。',tip:'フィールドの入力率が高いほど来月のAI評価コメントの精度が向上する。'},
+        ],
+        kpi:`来月の再発防止策入力率90%以上を目標とする。来月時点で前月比分析が実施できる状態にする。`,
+        risk:`今月の入力が不完全なままだと、来月以降の比較分析の精度が低下し傾向把握が困難になる。`,
+      }
+    });
+  }
+
+  // ── B. 繰り返し発生原因 ──
+  repeatCauses.forEach(([cause,cnt])=>{
+    const adv=matchCauseAdvice(cause);
+    cards.push({lv:'high',priority:'🔴 繰り返し',
+      title:`「${trunc(cause,20)}」が${cnt}件繰り返し発生`,
+      evidence:`今月 ${cnt}件／全${n}件の${Math.round(cnt/n*100)}%。根本原因への対策が未実施の可能性あり。`,
+      actions:adv,
+      detail:{
+        why:`同一原因「${trunc(cause,18)}」が${cnt}件繰り返し発生しているのは、前回発生時の対策が根本解決に至っていない証左である。繰り返し発生は担当者の「慣れ」「諦め」を生み品質意識の低下を招くリスクがある。`,
+        steps:adv.map((a,i)=>({
+          act:a,
+          how:i===0
+            ?`「${trunc(cause,15)}」が発生した${cnt}件を個別に照合し、作業者・時間帯・商品カテゴリの共通点を洗い出す。5Why分析（なぜを5回繰り返す）で真因を特定する。`
+            :`特定した真因に対し「再発させない仕組み」を設計する。個人の注意喚起に頼らず、チェックリスト・ダブルチェック・工程変更など仕組みに組み込む対策が最も効果的である。`,
+          tip:i===0
+            ?'個人差・時間差・曜日差も確認すると見えていなかった共通因子が発見されることがある。'
+            :'「〇〇に注意する」という対策は効果が薄い。物理的な工程変更が根本解決につながる。',
+        })),
+        kpi:`翌月の同原因による発生件数を0件にする。最低でも${cnt}件から50%削減（${Math.ceil(cnt*0.5)}件以下）を目標とする。`,
+        risk:`繰り返し発生を放置すると月次件数の「常態化」が進み、最終的には顧客との信頼関係の損傷・契約見直しリスクへ発展する可能性がある。`,
+      }
+    });
+  });
+
+  // ── C. トラブル区分の偏り ──
+  if(topTC&&topTC[1]/n>=0.7){
+    if(topTC[0]==='荷役トラブル'){
+      cards.push({lv:'med',priority:'⚠️ 重要',
+        title:`荷役トラブルが ${Math.round(topTC[1]/n*100)}%を占める`,
+        evidence:`荷役 ${topTC[1]}件 vs 配送 ${tcMap['配送トラブル']||0}件`,
+        actions:['倉庫内の作業手順・梱包基準を見直す','ピッキング・仕分け工程にダブルチェックを導入する','作業者への研修・注意喚起を実施する'],
+        detail:{
+          why:`荷役トラブルは倉庫内作業に起因するため自社でコントロールできる改善余地が最も大きい分野である。${Math.round(topTC[1]/n*100)}%という高比率は現行の作業手順・検品体制に構造的な課題がある可能性を示している。`,
+          steps:[
+            {act:'倉庫内の作業手順・梱包基準を見直す',how:'現行の梱包手順書・作業マニュアルを担当者と照合し実態との乖離を確認する。トラブル発生率の高い商品カテゴリの梱包仕様を重点的に見直す。',tip:'「手順書通りにやっている」という声があっても手順書自体が現場実態に合っていない場合がある。現場観察が最も効果的な確認方法である。'},
+            {act:'ピッキング・仕分け工程にダブルチェックを導入する',how:'高額商品・破損リスクの高い商品を対象にピッキング後の2名確認ルールを設ける。バーコードスキャンによる照合システムが利用可能な場合は最優先で検討する。',tip:'全品目へのダブルチェックは作業効率を下げる。リスクの高い品目に絞って導入することが費用対効果の観点から望ましい。'},
+            {act:'作業者への研修・注意喚起を実施する',how:'月1回の朝礼等でトラブル事例を共有するヒヤリハット報告会を設ける。新入・パート作業者向けにOJTチェックリストを整備する。',tip:'「注意してください」だけでなく実際のトラブル写真や事例を見せることで当事者意識が高まる。'},
+          ],
+          kpi:`翌々月までに荷役トラブル比率を60%以下に引き下げる。梱包起因のトラブルを今月比30%削減する。`,
+          risk:`対策なしの場合、倉庫内の品質意識が低下し数量違い・誤品など他のミスも増加するリスクがある。`,
+        }
+      });
+    } else {
+      cards.push({lv:'med',priority:'⚠️ 重要',
+        title:`配送トラブルが ${Math.round(topTC[1]/n*100)}%を占める`,
+        evidence:`配送 ${topTC[1]}件 vs 荷役 ${tcMap['荷役トラブル']||0}件`,
+        actions:['運送会社との定期品質会議を開催する','引き渡し時の確認作業を強化する','高破損率路線の代替運送会社を検討する'],
+        detail:{
+          why:`配送トラブルの${Math.round(topTC[1]/n*100)}%集中は輸配送工程（運送会社の取り扱い・車両・ルート）に主要因がある可能性を示している。外部委託先の行動に依存するためKPI設定と定期協議が改善の鍵となる。`,
+          steps:[
+            {act:'運送会社との定期品質会議を開催する',how:'月1回、運送会社の営業担当・現場管理者と品質会議を設定する。当月のトラブル件数・原因・対策状況を数値で共有し翌月の改善目標を文書で合意する。',tip:'口頭確認ではなく議事録を残し改善目標を書面で確認することが重要である。'},
+            {act:'引き渡し時の確認作業を強化する',how:'出荷時に「写真撮影＋状態確認サイン」を義務化する。トラブル発生時の責任範囲を明確にする引き渡しチェックリストを作成する。',tip:'引き渡し記録があることでトラブル発生時の原因特定が格段に早くなる。'},
+            {act:'高破損率路線の代替運送会社を検討する',how:'路線別のトラブル件数を集計し特定路線のトラブル率が高い場合は代替会社の見積もり取得・試験運用を検討する。',tip:'代替会社の検討は交渉材料としても有効であり現運送会社の品質改善を促す効果もある。'},
+          ],
+          kpi:`翌々月までに配送トラブル比率を60%以下に引き下げる。運送会社との品質会議を月1回定例化する。`,
+          risk:`改善なしの場合、配送品質の低下が継続しお客様先での発見率が高まる。顧客との信頼関係に影響するリスクがある。`,
+        }
+      });
+    }
+  }
+
+  // ── D. 運送会社集中 ──
+  if(topCar&&topCar[1]/n>=0.55){
+    cards.push({lv:'med',priority:'⚠️ 重要',
+      title:`${topCar[0]}への集中（${Math.round(topCar[1]/n*100)}%）`,
+      evidence:`今月 ${n}件中 ${topCar[0]} ${topCar[1]}件`,
+      actions:[`${topCar[0]}の担当営業所へ改善要求書を提出する`,`${topCar[0]}との品質基準・KPI（月次件数上限）を設定する`,'件数が多い路線・荷物種別を特定し、梱包改善を行う'],
+      detail:{
+        why:`${topCar[0]}が全トラブルの${Math.round(topCar[1]/n*100)}%（${topCar[1]}件）を占めている状況は、同社の取り扱いに起因するリスクが集中していることを示す。正式な改善要求を行わない限り同水準のトラブルが継続する可能性が高い。`,
+        steps:[
+          {act:`${topCar[0]}の担当営業所へ改善要求書を提出する`,how:`当月の${topCar[0]}起因トラブル${topCar[1]}件の詳細（日時・内容・影響）をリスト化し書面で改善要求を行う。回答期限（10営業日以内推奨）と対策計画書の提出を明記する。`,tip:'書面による要求は「言った・言わない」を防ぎ改善進捗の追跡も容易になる。'},
+          {act:`${topCar[0]}との品質基準・KPI（月次件数上限）を設定する`,how:`翌月から「月次トラブル件数${Math.ceil(topCar[1]*0.6)}件以下」をKPIとして合意文書に落とし込む。月次品質会議で進捗を確認する。`,tip:'KPIを数値で合意することで運送会社側の危機意識と改善への動機付けが高まる。'},
+          {act:'件数が多い路線・荷物種別を特定し、梱包改善を行う',how:`${topCar[0]}起因のトラブルを路線・商品カテゴリ・荷物サイズ別に集計する。特定路線・商品への梱包仕様強化（緩衝材追加・外装強化）を検討する。`,tip:'自社側の梱包改善と運送会社への要求を並行して行うことでより確実な改善が期待できる。'},
+        ],
+        kpi:`翌月の${topCar[0]}起因トラブルを${Math.ceil(topCar[1]*0.7)}件以下（今月比30%削減）とする。翌々月までに最多会社の比率50%以下を目指す。`,
+        risk:`改善要求を行わない場合、${topCar[0]}の品質改善への動機が生じず来月以降も同水準のトラブルが継続するリスクがある。`,
+      }
+    });
+  }
+
+  // ── E. お客様先発生率 ──
+  if(atCust/n>=0.85){
+    cards.push({lv:'med',priority:'⚠️ 重要',
+      title:`${Math.round(atCust/n*100)}%がお客様先で発生`,
+      evidence:`お客様先 ${atCust}件 ／ 配送中 ${plMap['配送中']||0}件`,
+      actions:['出荷前の目視検品を必須化する','高額・精密商品は梱包仕様を引き上げる','重要顧客向けに到着時確認フローを導入する'],
+      detail:{
+        why:`トラブルの${Math.round(atCust/n*100)}%がお客様先で発見されているということは、自社・運送会社の工程では気づかなかった問題が顧客に届いていることを意味する。顧客先での発見は満足度と信頼関係に直接影響する最も避けるべきシナリオである。`,
+        steps:[
+          {act:'出荷前の目視検品を必須化する',how:'全出荷品に「外観確認→伝票照合→梱包状態確認」の3点検品を出荷前工程に組み込む。検品者が検品票にサインして記録を残す運用とする。',tip:'全品目への検品が工数的に難しい場合は過去トラブル発生率の高い商品・顧客を優先する。'},
+          {act:'高額・精密商品は梱包仕様を引き上げる',how:'トラブル発生品の商品カテゴリを確認し、高額・精密商品の梱包仕様（緩衝材の種類・量・外装強度）を現行比1段階引き上げる。',tip:'梱包コストの増加分とクレーム対応・返品コストを比較すると梱包強化が費用対効果で優れることが多い。'},
+          {act:'重要顧客向けに到着時確認フローを導入する',how:'主要顧客への配送後、翌営業日以内に「到着確認の電話/メール」フローを設ける。早期発見により迅速な対応が可能になる。',tip:'確認フローは顧客にとっても「丁寧な対応」として評価され関係強化の副次効果がある。'},
+        ],
+        kpi:`翌々月までにお客様先発生率を70%以下に引き下げる。出荷前検品の導入後、未検品による到達トラブル0件を目標とする。`,
+        risk:`顧客先でのトラブル発見が継続すると顧客の信頼度が低下し、最終的には取引量の減少・契約見直しリスクへと発展する可能性がある。`,
+      }
+    });
+  }
+
+  // ── F. 影響数量が大きい ──
+  if(qty>50){
+    cards.push({lv:'med',priority:'⚠️ 確認',
+      title:`影響数量合計 ${qty.toLocaleString(undefined,{maximumFractionDigits:1})} と大きい`,
+      evidence:`上位3件：${topQtyRows.map(r=>`${r['ID']}号（${r._qty}${r._単位||''}）`).join('、')}`,
+      actions:['影響数量の大きい案件は優先的に原因調査を完了させる','大ロット出荷前の検品工程を強化する'],
+      detail:{
+        why:`影響数量合計${qty.toLocaleString()}は損失金額・補充コスト・顧客への影響の大きさを示す重要指標である。特に上位3件の大ロット案件は1件でも再発すると甚大な損失につながるリスクがある。`,
+        steps:[
+          {act:'影響数量の大きい案件は優先的に原因調査を完了させる',how:`上位3件（${topQtyRows.map(r=>r['ID']+'号').join('・')}）について、発生原因・経緯・再発防止策が未入力の場合は5営業日以内に入力を完了させる。担当者へ個別に記入依頼を行う。`,tip:'大ロット案件の原因は複数要因が重なることが多い。単純な「ミス」で片付けず工程・環境・タイミングを多角的に分析することが重要である。'},
+          {act:'大ロット出荷前の検品工程を強化する',how:'一定数量（例：100件以上）のロット出荷時には通常検品に加えてサンプル抜き取り検査（10%以上）を義務化する。大ロット出荷の当日朝に担当管理者が確認サインを行うルールを設ける。',tip:'大ロット出荷は「急いでいるから省略」が起きやすい。ルールを工程表に明記して例外なく実施できる仕組みにすることが重要である。'},
+        ],
+        kpi:`上位3件の原因調査・防止策入力を5営業日以内に完了する。翌月の影響数量合計を今月比50%以下に抑制する。`,
+        risk:`大ロット案件の再発は損失金額・補充コストが急増するだけでなく顧客への供給遅延・欠品という二次被害も発生するリスクがある。`,
+      }
+    });
+  }
+
+  // ── G. 再発防止策未入力 ──
+  if(noAdv>0){
+    cards.push({lv:noAdv/n>=0.5?'high':'med',priority:noAdv/n>=0.5?'🔴 緊急':'⚠️ 確認',
+      title:`再発防止策が未入力 ${noAdv}件（${Math.round(noAdv/n*100)}%）`,
+      evidence:`今月 ${n}件中、再発防止策の記録がない件数: ${noAdv}件`,
+      actions:['担当者に対策入力を督促する（〇日以内を目標）','対策未入力件数を管理KPIとして月次会議で報告する'],
+      detail:{
+        why:`再発防止策の未入力は、将来的に同様のトラブルが再発した際に「過去の対策が参照できない」状態を生む。記録がなければ組織的な学習が積み上がらず同じミスが繰り返されるリスクが高まる。`,
+        steps:[
+          {act:'担当者に対策入力を督促する（〇日以内を目標）',how:`未入力${noAdv}件の担当者を特定し、今週末（5営業日以内）を入力期限として個別に依頼メールを送る。入力が難しい場合は管理者が聞き取り代入力する方法も有効である。`,tip:'督促メールに「未入力件数・件名一覧」を添付すると担当者が対応しやすい。'},
+          {act:'対策未入力件数を管理KPIとして月次会議で報告する',how:'月次管理会議のアジェンダに「再発防止策入力率」を定例項目として追加する。目標値（90%以上）を設定し未達の場合は理由と改善策を報告する運用とする。',tip:'KPI化して会議で取り上げることで入力の重要性が組織全体に浸透しやすくなる。'},
+        ],
+        kpi:`今月末までに入力率${Math.min(100,Math.round((n-noAdv)/n*100)+30)}%以上を達成する。翌月から入力率90%以上を恒常的に維持する。`,
+        risk:`未入力が継続すると次月以降に同一原因でトラブルが再発した際の対策立案が遅れる。管理体制の不備として顧客・上位管理層からの信頼を損なうリスクもある。`,
+      }
+    });
+  }
+
+  // ── I. 得意先コード集中 ──
+  const custAdvMap=cntBy(rows,r=>r['得意先コード']);
+  const topCustAdv=topN(custAdvMap,1)[0];
+  if(topCustAdv&&topCustAdv[0]&&topCustAdv[1]/n>=0.3){
+    const cc=topCustAdv[1],cp=Math.round(cc/n*100);
+    cards.push({lv:'med',priority:'⚠️ 重要',
+      title:`得意先「${topCustAdv[0]}」へトラブル集中（${cp}%）`,
+      evidence:`今月 ${n}件中 得意先コード「${topCustAdv[0]}」${cc}件`,
+      actions:[
+        `得意先「${topCustAdv[0]}」向けの出荷・配送フローを個別点検する`,
+        '当該得意先への配送担当者・ルートを特定し集中対策を行う',
+        '得意先との品質確認ミーティングを設定し現状を共有する'],
+      detail:{
+        why:`得意先「${topCustAdv[0]}」への集中（${cp}%・${cc}件）は、この顧客向け出荷・配送フローに特有の問題がある可能性を示している。特定顧客のトラブル集中は取引関係に直接影響するリスクがある。`,
+        steps:[
+          {act:`得意先「${topCustAdv[0]}」向けの出荷・配送フローを個別点検する`,
+           how:'当該得意先向けの出荷記録・配送ルート・担当者を抽出し、他の得意先と異なる点（特殊梱包・長距離ルート・特殊商品）を特定する。トラブル内容の詳細を時系列で並べ共通パターンを探す。',
+           tip:'特定得意先のみにトラブルが集中する場合、その顧客固有の条件（商品特性・到着確認の厳格さ等）が原因のこともある。'},
+          {act:'当該得意先への配送担当者・ルートを特定し集中対策を行う',
+           how:`${topCustAdv[0]}向けの配送を担当する運送会社・ドライバーを特定し、過去トラブル内容を共有して注意喚起を行う。可能であれば担当ドライバーを固定化し品質の安定を図る。`,
+           tip:'担当ドライバーへの個別周知は一般的な注意喚起より効果が高い。'},
+          {act:'得意先との品質確認ミーティングを設定し現状を共有する',
+           how:'当月のトラブル内容と対策状況を率直に共有し、得意先が求める品質基準を再確認する。情報共有により信頼関係の維持・回復を図る。',
+           tip:'問題を能動的に開示することで顧客からの信頼が高まるケースが多い。'},
+        ],
+        kpi:`翌月の得意先「${topCustAdv[0]}」向けトラブルを${Math.ceil(cc*0.5)}件以下（50%削減）とする。`,
+        risk:`特定顧客へのトラブル集中を放置すると顧客満足度が著しく低下し、取引縮小・最悪の場合は取引停止リスクへと発展する可能性がある。`,
+      }
+    });
+  }
+
+  // ── J. 商品コード集中 ──
+  const prodAdvMap=cntBy(rows,r=>r['商品コード']);
+  const topProdAdv=topN(prodAdvMap,1)[0];
+  if(topProdAdv&&topProdAdv[0]&&topProdAdv[1]/n>=0.3){
+    const pc=topProdAdv[1],pp=Math.round(pc/n*100);
+    cards.push({lv:'med',priority:'⚠️ 重要',
+      title:`商品コード「${topProdAdv[0]}」へトラブル集中（${pp}%）`,
+      evidence:`今月 ${n}件中 商品コード「${topProdAdv[0]}」${pc}件`,
+      actions:[
+        `商品「${topProdAdv[0]}」の梱包仕様・取り扱い手順を見直す`,
+        '当該商品の出荷時検品基準を強化する',
+        '商品特性（破損しやすさ・重量・形状）に合わせた専用対策を講じる'],
+      detail:{
+        why:`商品コード「${topProdAdv[0]}」が全トラブルの${pp}%（${pc}件）を占めている状況は、この商品固有の取り扱い上の課題がある可能性を示している。商品特性に合わない梱包・取り扱いが繰り返しトラブルを生んでいると考えられる。`,
+        steps:[
+          {act:`商品「${topProdAdv[0]}」の梱包仕様・取り扱い手順を見直す`,
+           how:'当該商品の梱包仕様書を確認し実際の梱包状態と乖離がないかを現場で点検する。重量・形状・破損リスクに応じた梱包材・緩衝材の種類と量を見直す。商品固有の梱包基準書がない場合は新規作成する。',
+           tip:'他商品と同じ梱包基準を適用していることが問題の場合がある。商品固有の梱包基準書が最も効果的である。'},
+          {act:'当該商品の出荷時検品基準を強化する',
+           how:`商品コード「${topProdAdv[0]}」の出荷時に外観チェック・梱包確認を通常の2倍の頻度で実施する。検品担当者を固定化して品質のばらつきを抑える。`,
+           tip:'特定商品への重点検品は作業効率への影響が小さく効果が大きい。'},
+          {act:'商品特性（破損しやすさ・重量・形状）に合わせた専用対策を講じる',
+           how:'当該商品のトラブル内容を分析し最も多いトラブルタイプ（破損・数量不足・誤品等）に特化した対策を設計する。必要に応じてメーカー・仕入先への梱包仕様変更の提案も検討する。',
+           tip:'特殊形状・高重量商品の場合、専用パレット・専用コンテナの活用が最も効果的なケースがある。'},
+        ],
+        kpi:`翌月の商品コード「${topProdAdv[0]}」のトラブルを${Math.ceil(pc*0.5)}件以下（50%削減）とする。`,
+        risk:`特定商品のトラブル集中を放置すると、その商品の出荷量が多い月に大規模クレームが発生するリスクがある。同商品を扱う他の倉庫・路線にもトラブルが波及する可能性がある。`,
+      }
+    });
+  }
+
+  // ── H. 継続改善 ──
+  cards.push({lv:'info',priority:'🔵 継続改善',
+    title:'毎月の定点観測で傾向を把握する',
+    evidence:'月次データの継続蓄積により、季節性・倉庫別・運送会社別の傾向が明確になります。',
+    actions:['毎月1日に前月のCSVをこのシステムに取り込み、PDF出力して保存する','トラブル件数・影響数量・再発防止策入力率を月次KPIとして管理する','原因分析は4M（Man・Machine・Method・Material）の視点で深掘りする'],
+    detail:{
+      why:`月次データの継続蓄積により、季節変動・担当者別傾向・特定運送会社の品質変化など単月では見えない「構造的な課題」が浮かび上がってくる。3ヶ月以上継続することで分析精度と対策効果検証が格段に向上する。`,
+      steps:[
+        {act:'毎月1日に前月のCSVをこのシステムに取り込み、PDF出力して保存する',how:'月次業務カレンダーの1日に「トラブル分析レポート作成」を定例タスクとして登録する。PDF出力→共有フォルダ保存→管理会議共有というフローを標準化する。',tip:'毎月同じ日・同じ手順で実施することで継続率が格段に上がる。担当者を固定化しておくと確実である。'},
+        {act:'トラブル件数・影響数量・再発防止策入力率を月次KPIとして管理する',how:'管理会議の定例資料に「月次KPIダッシュボード（件数推移・倉庫別件数・入力率）」を追加する。前月比較を必ず行い改善・悪化の要因を1行で記載する。',tip:'KPIは3〜5項目に絞ることで会議での議論が深まりやすい。'},
+        {act:'原因分析は4M（Man・Machine・Method・Material）の視点で深掘りする',how:'繰り返し発生する原因に対して4M分析シートを用い「人・機械・方法・材料」の各視点から要因を洗い出す。月1件でも深掘り分析を実施することが品質向上の礎となる。',tip:'4M分析は現場担当者と管理者が一緒に行うことで現場実態に即した対策が生まれやすい。'},
+      ],
+      kpi:`6ヶ月後に月次トラブル件数を現在比20%削減する。再発防止策入力率90%以上を半年以内に達成・維持する。`,
+      risk:`月次分析を中断するとトラブルの「見える化」が途絶え、問題が顕在化した時点では手遅れになっているケースが生じる。継続こそが最大のリスクヘッジである。`,
+    }
+  });
+
+  // ── レンダリング ──
+  document.getElementById('advice-list').innerHTML=cards.map((c,idx)=>`
+    <div class="adv-card ${c.lv}">
+      <div><span class="adv-priority">${c.priority}</span></div>
+      <div class="adv-title">${c.title}</div>
+      <div class="adv-evidence">📊 根拠：${c.evidence}</div>
+      <div class="adv-action">
+        <b>✅ 推奨アクション：</b>
+        <ul>${c.actions.map(a=>`<li>${a}</li>`).join('')}</ul>
+      </div>
+      <button id="adv-tog-${idx}" onclick="toggleAdv(${idx})"
+        style="margin-top:10px;background:none;border:1.5px solid currentColor;border-radius:6px;padding:5px 14px;font-size:.75rem;font-weight:600;cursor:pointer;opacity:.75;color:inherit;display:inline-flex;align-items:center;gap:5px">
+        ▼ 詳細解説を見る
+      </button>
+      <div id="adv-det-${idx}" style="display:none;margin-top:12px;background:rgba(255,255,255,.7);border-radius:8px;padding:14px 16px;font-size:.79rem;line-height:1.75;color:#1f2937">
+        <div style="margin-bottom:12px">
+          <div style="font-weight:700;color:#1a56db;margin-bottom:4px">📌 なぜ今これが重要か</div>
+          <div>${esc(c.detail.why)}</div>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-weight:700;color:#1a56db;margin-bottom:8px">📋 推奨アクションの詳細手順</div>
+          ${c.detail.steps.map(s=>`
+            <div style="margin-bottom:9px;padding:9px 12px;background:rgba(255,255,255,.6);border-radius:7px;border-left:2.5px solid #93b4f8">
+              <div style="font-weight:700;margin-bottom:4px;color:#1a56db">▶ ${esc(s.act)}</div>
+              <div style="color:#374151;margin-bottom:4px">・${esc(s.how)}</div>
+              <div style="color:#6b7280;font-size:.72rem;background:rgba(0,0,0,.03);border-radius:4px;padding:3px 7px">💡 ポイント：${esc(s.tip)}</div>
+            </div>`).join('')}
+        </div>
+        <div style="margin-bottom:12px;padding:9px 12px;background:rgba(14,159,110,.08);border-radius:7px;border-left:2.5px solid #0e9f6e">
+          <div style="font-weight:700;color:#0e9f6e;margin-bottom:4px">🎯 期待効果と成功指標（KPI）</div>
+          <div>${esc(c.detail.kpi)}</div>
+        </div>
+        <div style="padding:9px 12px;background:rgba(224,36,36,.06);border-radius:7px;border-left:2.5px solid #e02424">
+          <div style="font-weight:700;color:#e02424;margin-bottom:4px">⚡ 未実施の場合のリスク</div>
+          <div>${esc(c.detail.risk)}</div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleAdv(idx){
+  const det=document.getElementById('adv-det-'+idx);
+  const tog=document.getElementById('adv-tog-'+idx);
+  if(!det||!tog)return;
+  const show=det.style.display==='none';
+  det.style.display=show?'block':'none';
+  tog.innerHTML=show?'▲ 閉じる':'▼ 詳細解説を見る';
+}
+
+function matchCauseAdvice(cause){
+  const c=cause.toLowerCase();
+  const rules=[
+    [['梱包','包装','緩衝'],['梱包基準マニュアルを見直し、作業者へ再周知する','梱包資材の種類・品質を見直す（緩衝材・外装強度）']],
+    [['取扱','荷扱','中継','佐川','ヤマト','運送'],['該当運送会社へ書面で改善要求を行う','引き渡し時に損傷確認を記録する（写真付き）']],
+    [['ピッキング','仕分','誤品','品番'],['バーコードスキャン照合を出荷前工程に組み込む','ピッキングリストの視認性を改善する（フォント拡大・色分け）']],
+    [['数量','不足','欠品'],['出荷前の全数検品を義務化する','伝票と現物の照合手順を標準化する']],
+    [['不明','原因特定','調査中'],['原因不明案件を週次でレビューし、仮説検証を行う','現場へのヒアリング（5Why分析）を実施する']],
+  ];
+  for(const [kws,advs] of rules){if(kws.some(k=>c.includes(k)))return advs;}
+  return['当該原因の詳細を現場担当者とともに分析する','恒久対策（再発ゼロを目指す対策）を立案・実施する'];
+}
+
+// ══════════════════════════════════════════════
+// DETAIL TABLE
+// ══════════════════════════════════════════════
+function renderDetailTable(){
+  const rows=getRows().slice(0,200);
+  const cols=['ID','発生日時','_所属組織','作成者名','_発生場所','_出荷元倉庫','_運送会社名','_トラブル区分','内容詳細','発生原因','再発防止策','数量','_単位'];
+  const lb={'_所属組織':'所属組織','_発生場所':'発生場所','_出荷元倉庫':'出荷元倉庫','_運送会社名':'運送会社','_トラブル区分':'トラブル区分','_単位':'単位'};
+  const tot=getRows().length;
+  document.getElementById('detail-note').textContent=tot>200?`先頭200件表示（全${tot}件）`:`全${tot}件`;
+  const hdr=cols.map(k=>`<th>${esc(lb[k]||k)}</th>`).join('');
+  const trs=rows.map(r=>`<tr>${cols.map(k=>{const long=['内容詳細','発生原因','再発防止策'].includes(k);const v=trunc(String(r[k]??''),28);return`<td${long?` class="cc" title="${esc(r[k]??'')}"`:''}>${esc(v)}</td>`;}).join('')}</tr>`).join('');
+  document.getElementById('detail-table').innerHTML=rows.length
+    ?`<table><thead><tr>${hdr}</tr></thead><tbody>${trs}</tbody></table>`
+    :'<div class="empty-state">データなし</div>';
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+function parseDate(s){if(!s)return null;const d=new Date(String(s).trim().replace(/\s+/,' '));return isNaN(d)?null:d;}
+function cntBy(arr,fn){const m={};arr.forEach(r=>{const k=fn(r);if(k!=null&&k!=='')m[k]=(m[k]||0)+1;});return m;}
+function topN(map,n){return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,n);}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function trunc(s,n){return s.length>n?s.slice(0,n)+'…':s;}
+
+// ══════════════════════════════════════════════
+// PDF出力 - フォント読み込み完了を待ってから印刷
+// ══════════════════════════════════════════════
+function doPrint(){
+  const btn=document.getElementById('btn-pdf');
+  if(btn){btn.textContent='⏳ フォント準備中...';btn.disabled=true;}
+  // document.fonts.ready でNoto Sans JPの読み込み完了を待つ
+  document.fonts.ready.then(()=>{
+    if(btn){btn.textContent='🖨️ PDF出力';btn.disabled=false;}
+    window.print();
+  }).catch(()=>{
+    // フォント読み込み失敗時もそのまま印刷
+    if(btn){btn.textContent='🖨️ PDF出力';btn.disabled=false;}
+    window.print();
+  });
+}
+</script>
+</body>
+</html>
